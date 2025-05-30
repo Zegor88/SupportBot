@@ -2,7 +2,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 import logging
 
 from .config import Config, logger
-from .handlers import start, help_command, echo # Пока только echo для Task E1
+from .handlers import start, help_command, handle_text_message # Пока только echo для Task E1
 
 class TelegramBot:
     def __init__(self, token: str):
@@ -21,7 +21,7 @@ class TelegramBot:
         
         # Для Task E1 (echo) регистрируем echo handler
         # В будущих задачах здесь будет более сложная логика MessageHandler
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
         
         logger.info("Обработчики команд зарегистрированы.")
 
