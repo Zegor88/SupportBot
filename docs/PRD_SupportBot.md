@@ -102,7 +102,7 @@ OpenAI rate-limit	M/H	кеш, back-off
 Эпик	Цель	Done-критерий	Ключевые задачи
 E0. Git Repo & Среда	Централизованный код и reproducible-среда	Репо с README, .gitignore, pyproject.toml	Инициализировать repo; настроить pre-commit (black, ruff); Makefile/poetry для venv
 E1. Telegram Handler	Принимать сообщения и отвечать «echo»	Бот онлайн, echo ≤ 2 с	Создать Bot Token; async-хендлер MessageHandler; поддержать группы и DM
-E2. Validator	Фильтровать не-EN и токсичный контент	≥ 95 % «мусора» отсеяно	FastText lang-detect; regex/URL-спам-фильтр; заглушка-ответ
+E2. Validator	Фильтровать не-EN; заглушка-ответ
 E3. Router & Dynamic Instructions	Выбрать инструкцию и действие (reply/forward/drop)	100 % сообщений получают верный action	YAML-rules store; RouterAgent; команда /reload_rules; пересылка в dst_chat_id
 E4. Retrieval (RAG)	Достать релевантный контекст	top-3 Q&A < 200 мс	Загрузить answers_table.pkl; FAISS + OpenAIEmbeddings; get_context()
 E5. Answer Generation	Сформировать связный ответ	≥ 50 % кейсов закрыты ботом	Промпт: system_prompt+history+context; GPT-4o-mini; ответ ≤ 500 токенов
