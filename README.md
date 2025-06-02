@@ -14,6 +14,129 @@ Support Bot - это интеллектуальный помощник, кото
 - Аналитика и отчетность по обращениям
 - Валидация языка сообщений (только английский язык)
 
+### Маршрутизация запросов и `rules.yaml`
+
+Одной из ключевых функций бота является гибкая маршрутизация входящих сообщений на основе набора правил, определенных в файле `rules.yaml`. Это позволяет настроить поведение бота для различных типов запросов без изменения кода.
+
+#### Обзор `rules_manager`
+
+Модуль `src/rules_manager` отвечает за загрузку, валидацию и управление правилами маршрутизации из файла `rules.yaml`.
+
+*   **`RulesManager`**: Основной класс, предоставляющий интерфейс для доступа к правилам. Он загружает правила при инициализации и выполняет их валидацию.
+*   **Pydantic модели**: Схема файла `rules.yaml` строго определена с использованием Pydantic моделей (в `src/rules_manager/models.py`), что обеспечивает корректность формата правил и типов данных.
+
+#### Структура `rules.yaml`
+
+Файл `rules.yaml` содержит список правил, каждое из которых определяет условия срабатывания и соответствующее действие. Правила обрабатываются в порядке их `priority`.
+
+**Поля каждого правила:**
+
+*   `rule_id` (строка, обязательное): Уникальный текстовый идентификатор правила (например, "greet_user", "faq_payment_issue").
+*   `priority` (целое число, обязательное): Приоритет правила. Правила с меньшим значением приоритета проверяются раньше.
+*   `conditions` (список, обязательное, минимум 1 элемент): Список условий. Правило срабатывает, если **все** условия в списке истинны.
+    *   Каждое условие имеет поле `type`, определяющее его логику:
+        *   **`keyword_match`**: Поиск по ключевым словам.
+            *   `keywords` (список строк, обязательное, минимум 1 слово): Ключевые слова для поиска.
+            *   `match_type` (строка, опционально, по умолчанию "any"):
+                *   `any`: Условие истинно, если найдено хотя бы одно слово из `keywords`.
+                *   `all`: Условие истинно, если найдены все слова из `keywords`.
+            *   `case_sensitive` (булево, опционально, по умолчанию `false`): Учитывать ли регистр при поиске ключевых слов.
+        *   **`regex_match`**: Поиск по регулярному выражению.
+            *   `pattern` (строка, обязательное): Регулярное выражение для поиска.
+*   `action` (строка, обязательное): Действие, которое выполнится, если правило сработало. Допустимые значения:
+    *   `reply`: Ответить на сообщение.
+    *   `forward`: Переслать сообщение.
+    *   `drop`: Проигнорировать сообщение (ничего не делать).
+*   `action_params` (объект, обязательное): Параметры для указанного `action`. Структура зависит от типа действия:
+    *   Для `action: reply`:
+        *   Должен быть указан **один из** следующих параметров:
+            *   `response_text` (строка): Текст прямого ответа.
+            *   `system_prompt_key` (строка): Ключ, по которому будет получен системный промпт (например, из другого конфигурационного файла или базы данных). Этот промпт будет использован для генерации ответа с помощью LLM.
+    *   Для `action: forward`:
+        *   `destination_chat_id` (строка, обязательное): ID чата (пользователя или группы) в Telegram, куда будет переслано сообщение.
+    *   Для `action: drop`:
+        *   Может быть пустым объектом `{}`. Никаких дополнительных параметров не требуется.
+
+#### Пример `rules.yaml`
+
+```yaml
+rules:
+  - rule_id: "hamster_greeting"
+    priority: 1
+    conditions:
+      - type: "keyword_match"
+        keywords: ["hamster", "хом як", "хомяк"]
+        match_type: "any"
+        case_sensitive: false
+      - type: "keyword_match"
+        keywords: ["привет", "здравствуй", "hello", "hi"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "Привет! Вижу, у вас вопрос по Hamster Combat. Задавайте!"
+
+  - rule_id: "specific_hamster_issue"
+    priority: 5
+    conditions:
+      - type: "regex_match"
+        pattern: "(комбо|combo|карточк[иа])\s*(какие|какая|каких|обновились)"
+        case_sensitive: false
+      - type: "keyword_match"
+        keywords: ["hamster", "хом як"]
+        match_type: "any"
+    action: "reply"
+    action_params:
+      system_prompt_key: "hamster_combo_cards" # Этот ключ будет использован для получения промпта
+
+  - rule_id: "forward_urgent_to_admin"
+    priority: 10
+    conditions:
+      - type: "keyword_match"
+        keywords: ["срочно", "важно", "помогите", "sos"]
+        match_type: "any"
+    action: "forward"
+    action_params:
+      destination_chat_id: "YOUR_ADMIN_CHAT_ID" # Замените на реальный ID
+
+  - rule_id: "drop_spam"
+    priority: 100
+    conditions:
+      - type: "regex_match"
+        pattern: "купить\s*виллу|заработок\s*онлайн"
+        case_sensitive: false
+    action: "drop"
+    action_params: {}
+```
+
+#### Пример использования `RulesManager`
+
+```python
+from src.rules_manager.manager import RulesManager
+from src.rules_manager.exceptions import RulesFileError
+
+try:
+    # Путь к файлу rules.yaml (может быть относительным или абсолютным)
+    rules_path = "rules.yaml" 
+    rules_manager = RulesManager(rules_path)
+
+    # Получение всех правил
+    all_rules = rules_manager.get_rules()
+    # print(f"Загружено правил: {len(all_rules)}")
+
+    # Пример поиска правила по ID (если необходимо)
+    # rule = rules_manager.get_rule_by_id("hamster_greeting")
+    # if rule:
+    #     print(f"Найдено правило: {rule.rule_id}, Приоритет: {rule.priority}")
+
+except RulesFileError as e:
+    print(f"Ошибка загрузки или валидации файла правил: {e}")
+    # Здесь должна быть логика обработки ошибки, например, логирование и выход
+except FileNotFoundError:
+    print(f"Файл правил по пути '{rules_path}' не найден.")
+    # Аналогично, обработка ошибки
+```
+
 ## Требования
 
 - Python 3.10+

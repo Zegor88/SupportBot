@@ -1,0 +1,74 @@
+rules:
+  - rule_id: "hamster_withdraw"
+    priority: 10
+    conditions:
+      - type: "keyword_match"
+        keywords: ["withdraw", "reward", "hamster", "boost"]
+        match_type: "all" # Все слова должны присутствовать
+        case_sensitive: false
+      - type: "keyword_match" # Дополнительное условие, чтобы убедиться, что речь именно о выводе
+        keywords: ["how to", "how do i", "can i", "where is my"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "Hello! If you have received a reward in Hamster Boost, follow these instructions: https://t.me/broxus_chat/26814"
+
+  - rule_id: "hamster_other_support"
+    priority: 11 # Немного ниже приоритет, чем у hamster_withdraw
+    conditions:
+      - type: "keyword_match"
+        keywords: ["hamster", "combat", "boost"] # Основные идентификаторы темы
+        match_type: "any"
+        case_sensitive: false
+      - type: "keyword_match" # Ключевые слова, указывающие на запрос поддержки, не связанный с выводом
+        keywords: ["support", "help", "tokenomics", "gameplay", "card", "how to play", "issue", "problem"]
+        match_type: "any"
+        case_sensitive: false
+      # Можно добавить условие с NOT MATCH на "withdraw", если бы YAML поддерживал такую сложную логику напрямую,
+      # но это обычно решается порядком правил или более специфичными условиями.
+      # Здесь приоритет и более общие ключевые слова для "withdraw" в правиле выше должны сработать первыми.
+    action: "reply"
+    action_params:
+      response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
+
+  - rule_id: "forward_urgent_issue"
+    priority: 5 # Высокий приоритет
+    conditions:
+      - type: "regex_match"
+        pattern: "(?i)urgent|critical|blocker|immediate assistance"
+    action: "forward"
+    action_params:
+      destination_chat_id: "@urgent_support_team_test" # Замените на реальный канал
+
+  - rule_id: "drop_spam_keywords"
+    priority: 1 # Самый высокий приоритет для отсева спама
+    conditions:
+      - type: "keyword_match"
+        keywords: ["buy cheap followers", "crypto pump group", "guaranteed profit", "100x coin"]
+        match_type: "any"
+        case_sensitive: false
+    action: "drop"
+    action_params: {} # Пустые параметры для drop
+
+  - rule_id: "reply_with_faq_prompt_greeting"
+    priority: 100
+    conditions:
+      - type: "keyword_match"
+        keywords: ["hello", "hi", "hey", "greetings"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      system_prompt_key: "greeting_general_prompt"
+
+  - rule_id: "reply_with_faq_prompt_how_to"
+    priority: 101
+    conditions:
+      - type: "keyword_match"
+        keywords: ["how to", "what is", "explain", "can you tell me about"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      system_prompt_key: "general_faq_prompt" 

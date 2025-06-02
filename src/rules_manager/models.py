@@ -1,0 +1,99 @@
+from typing import List, Literal, Optional, Union, Dict, Any
+from pydantic import BaseModel, Field, validator, root_validator, model_validator, ValidationError
+
+# Enums
+ActionType = Literal["reply", "forward", "drop"]
+ConditionType = Literal["keyword_match", "regex_match"]
+KeywordMatchType = Literal["any", "all"]
+
+# --- Condition Models ---
+class BaseCondition(BaseModel):
+    type: ConditionType
+
+class KeywordMatchCondition(BaseCondition):
+    type: Literal["keyword_match"] = "keyword_match"
+    keywords: List[str] = Field(..., min_length=1)
+    match_type: KeywordMatchType = "any"
+    case_sensitive: bool = False
+
+class RegexMatchCondition(BaseCondition):
+    type: Literal["regex_match"] = "regex_match"
+    pattern: str
+
+# Union of all condition types using discriminated union
+AnyCondition = Union[KeywordMatchCondition, RegexMatchCondition]
+
+# --- Action Parameter Models ---
+class BaseActionParams(BaseModel):
+    pass
+
+class ReplyActionParams(BaseActionParams):
+    response_text: Optional[str] = None
+    system_prompt_key: Optional[str] = None
+
+    @model_validator(mode='after')
+    def check_reply_params(self) -> 'ReplyActionParams':
+        if not self.response_text and not self.system_prompt_key:
+            raise ValueError('Either response_text or system_prompt_key must be provided for reply action')
+        return self
+
+class ForwardActionParams(BaseActionParams):
+    destination_chat_id: str
+
+class DropActionParams(BaseActionParams):
+    # No specific params, can be an empty dict in YAML
+    pass
+
+# --- Rule Model ---
+class Rule(BaseModel):
+    rule_id: str
+    priority: int
+    conditions: List[AnyCondition] = Field(..., min_length=1)
+    action: ActionType
+    action_params: Union[ReplyActionParams, ForwardActionParams, DropActionParams]
+
+    @model_validator(mode='before')
+    @classmethod
+    def _init_action_params(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        action_type = data.get('action')
+        params_data = data.get('action_params')
+
+        if action_type is None:
+            return data
+
+        if params_data is None:
+            params_data = {}
+            data['action_params'] = params_data
+
+        if not isinstance(params_data, dict):
+            raise ValueError(
+                f"action_params must be a dictionary for action '{action_type}', "
+                f"got {type(params_data).__name__}."
+            )
+
+        try:
+            if action_type == 'reply':
+                data['action_params'] = ReplyActionParams(**params_data)
+            elif action_type == 'forward':
+                data['action_params'] = ForwardActionParams(**params_data)
+            elif action_type == 'drop':
+                data['action_params'] = DropActionParams(**params_data)
+        except ValidationError:
+            raise # Валидационная ошибка из Pydantic при создании *ActionParams, даем ей всплыть
+        except ValueError as e:
+            # Оборачиваем другие ValueError (например, из нашего кастомного валидатора) в ValidationError
+            # чтобы они были консистентно обработаны Pydantic и нашим RulesManager
+            # Это должно помочь тесту поймать RulesFileError
+            raise ValidationError.from_exception_data(
+                title=cls.__name__ + ".action_params", 
+                line_errors=[{'type': 'value_error', 'loc': ('action_params', action_type), 'msg': str(e), 'input': params_data}]
+            )
+
+        return data
+
+# --- Config Model (for the entire rules.yaml file) ---
+class RulesConfig(BaseModel):
+    rules: List[Rule] 
