@@ -82,12 +82,243 @@ Env Mgmt	python-dotenv	безопасность
 
 8. Agents
 
-Агент	Роль	Техники / Методики
-ValidatorAgent	Фильтр языка/токсичности	FastText, OpenAI moderation
-RouterAgent	Маршрутизация по YAML-правилам	Regex/keyword match
-RetrieverAgent	Поиск контекста	FAISS + OpenAIEmbeddings
-AnswerAgent	Генерация ответа	Prompt-engineering, RAG-fusion
-LoggerAgent	Журналирование	Async SQLite writes
+## 8.1. Обзор агентной архитектуры
+
+Система построена на основе агентной архитектуры с использованием OpenAI Agent SDK, что обеспечивает:
+- Изолированную ответственность каждого агента
+- Четкие интерфейсы взаимодействия между агентами
+- Возможность независимого масштабирования и модификации агентов
+- Встроенные механизмы трассировки и логирования
+- Поддержку handoff (передачи управления) между агентами
+
+## 8.2. Описание агентов
+
+### ValidatorAgent
+**Роль**: Первичная фильтрация и валидация входящих сообщений.
+**Ответственности**:
+- Определение языка сообщения (только английский в v1)
+- Проверка на токсичность/спам
+- Блокировка неприемлемого контента
+**Техники**:
+- FastText для определения языка
+- OpenAI moderation API для проверки контента
+**Взаимодействие**:
+- Входные данные: raw message из Telegram
+- Выходные данные: validated message или rejection response
+- Следующий агент: RouterAgent (если валидация пройдена)
+
+### RouterAgent
+**Роль**: Определение способа обработки сообщения на основе YAML-правил.
+**Ответственности**:
+- Загрузка и применение правил маршрутизации
+- Анализ сообщения на соответствие условиям правил
+- Принятие решения о действии (reply/forward/drop)
+- Подготовка system prompt для AnswerAgent (если требуется)
+**Техники**:
+- Regex/keyword matching для анализа сообщений
+- Приоритезация правил
+- Динамическая перезагрузка правил
+**Взаимодействие**:
+- Входные данные: validated message
+- Выходные данные: RouterDecision (action + параметры)
+- Следующий агент: RetrieverAgent (для reply) или прямое действие (для forward/drop)
+
+### RetrieverAgent
+**Роль**: Поиск релевантного контекста для генерации ответа.
+**Ответственности**:
+- Векторизация входящего запроса
+- Поиск похожих Q&A в базе знаний
+- Формирование контекста для AnswerAgent
+**Техники**:
+- FAISS для векторного поиска
+- OpenAIEmbeddings для векторизации
+- Ранжирование результатов по релевантности
+**Взаимодействие**:
+- Входные данные: user message + метаданные
+- Выходные данные: отранжированный список релевантных Q&A
+- Следующий агент: AnswerAgent
+
+### AnswerAgent
+**Роль**: Генерация финального ответа пользователю.
+**Ответственности**:
+- Сборка промпта из всех компонентов
+- Генерация связного ответа
+- Форматирование ответа для Telegram
+**Техники**:
+- Prompt-engineering
+- RAG-fusion для объединения контекста
+- GPT-4o-mini для генерации
+**Взаимодействие**:
+- Входные данные: system prompt + user message + context + history
+- Выходные данные: готовый ответ для пользователя
+- Следующий этап: отправка ответа в Telegram
+
+### LoggerAgent
+**Роль**: Сбор и сохранение данных о работе системы.
+**Ответственности**:
+- Логирование всех этапов обработки
+- Сохранение диалогов и метаданных
+- Подготовка данных для аналитики
+**Техники**:
+- Асинхронная запись в SQLite
+- Структурированное логирование
+- Трассировка через OpenAI Agent SDK
+**Взаимодействие**:
+- Входные данные: события от всех агентов
+- Выходные данные: записи в БД, логи
+- Интеграции: возможность экспорта в CSV
+
+## 8.3. Схема взаимодействия агентов
+
+```mermaid
+graph TD
+    TG[Telegram] --> VA[ValidatorAgent]
+    VA --> |valid| RA[RouterAgent]
+    VA --> |invalid| TG
+    
+    RM[RulesManager] --> |rules| RA
+    RA --> |reload_rules| RM
+    
+    RA --> |reply| RTA[RetrieverAgent]
+    RA --> |forward| TG
+    RA --> |drop| END[End]
+    RTA --> AA[AnswerAgent]
+    AA --> TG
+    
+    LA[LoggerAgent] --> |logs| DB[(SQLite)]
+    VA -.-> |events| LA
+    RA -.-> |events| LA
+    RTA -.-> |events| LA
+    AA -.-> |events| LA
+    RM -.-> |rule operations| LA
+
+    subgraph Rules Management
+        RM
+        YAML[rules.yaml] --> |load| RM
+        ADMIN[Admin] --> |/reload_rules| RM
+    end
+
+    style RM fill:#f9f,stroke:#333,stroke-width:2px
+    style Rules Management fill:#f5f5f5,stroke:#666,stroke-width:1px
+```
+
+## 8.4. Расширяемость
+
+Архитектура предусматривает возможность добавления новых агентов для расширения функциональности:
+- SecurityAgent (будущее): дополнительный слой безопасности
+- AnalyticsAgent (будущее): real-time анализ метрик
+- MultilingualAgent (будущее): поддержка других языков
+- PersonalizationAgent (будущее): адаптация ответов под пользователя
+
+## 8.5. RulesManager
+
+RulesManager - это ключевой компонент системы, отвечающий за управление правилами маршрутизации и их валидацию.
+
+### 8.5.1. Назначение
+- Централизованное хранение и управление правилами маршрутизации
+- Валидация структуры правил при загрузке
+- Предоставление правил RouterAgent в отсортированном виде
+- Поддержка горячей перезагрузки правил без перезапуска бота
+
+### 8.5.2. Структура правил (rules.yaml)
+```yaml
+rules:
+  - rule_id: "spam_filter"
+    priority: 1
+    conditions:
+      - type: "keyword_match"
+        keywords: ["casino", "lottery", "win money"]
+        match_type: "any"
+        case_sensitive: false
+    action: "drop"
+    action_params: {}
+
+  - rule_id: "technical_support"
+    priority: 2
+    conditions:
+      - type: "regex_match"
+        pattern: "error|bug|not working"
+    action: "forward"
+    action_params:
+      destination_chat_id: "tech_support_group"
+
+  - rule_id: "faq_query"
+    priority: 3
+    conditions:
+      - type: "keyword_match"
+        keywords: ["how to", "what is", "help"]
+        match_type: "any"
+    action: "reply"
+    action_params:
+      system_prompt_key: "faq_assistant"
+```
+
+### 8.5.3. Поддерживаемые типы условий
+1. **keyword_match**:
+   - keywords: список ключевых слов
+   - match_type: "any" | "all" | "exact"
+   - case_sensitive: boolean
+
+2. **regex_match**:
+   - pattern: регулярное выражение
+   - flags: опции регулярного выражения
+
+3. **composite_condition** (будущее):
+   - operator: "and" | "or" | "not"
+   - conditions: вложенные условия
+
+### 8.5.4. Поддерживаемые действия
+1. **reply**:
+   - response_text: готовый текст ответа
+   - system_prompt_key: ключ для выбора системного промпта
+
+2. **forward**:
+   - destination_chat_id: ID чата для пересылки
+
+3. **drop**:
+   - без параметров
+
+### 8.5.5. Валидация правил
+RulesManager выполняет следующие проверки:
+- Уникальность rule_id
+- Корректность приоритетов
+- Валидность регулярных выражений
+- Соответствие параметров действий схеме
+- Существование указанных system_prompt_key
+- Валидность destination_chat_id
+
+### 8.5.6. API
+```python
+class RulesManager:
+    def load_rules(self) -> None:
+        """Загрузка правил из YAML-файла"""
+        
+    def reload_rules(self) -> None:
+        """Горячая перезагрузка правил"""
+        
+    def get_rules(self) -> List[Rule]:
+        """Получение отсортированного списка правил"""
+        
+    def get_rule_by_id(self, rule_id: str) -> Optional[Rule]:
+        """Получение правила по ID"""
+        
+    def validate_rules(self) -> List[ValidationError]:
+        """Валидация загруженных правил"""
+```
+
+### 8.5.7. Интеграция с системой
+- RouterAgent использует RulesManager для получения и применения правил
+- Telegram-команда /reload_rules вызывает метод reload_rules()
+- LoggerAgent записывает все операции с правилами
+- Ошибки валидации отправляются администраторам
+
+### 8.5.8. Расширяемость
+RulesManager спроектирован с учётом будущих улучшений:
+- Добавление новых типов условий
+- Поддержка сложных составных условий
+- Интеграция с внешними источниками правил
+- Версионирование правил
+- A/B тестирование правил
 
 9. Risks & Mitigations
 

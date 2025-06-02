@@ -1,4 +1,48 @@
 rules:
+  - rule_id: "GREETING"
+    priority: 1
+    conditions:
+      - type: "keyword_match"
+        keywords: ["hello", "hi", "hey", "greetings"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "Hello there! This is your Router Agent. How can I assist you?"
+
+  - rule_id: "HAMSTER_COMBAT_SUPPORT_REDIRECT"
+    priority: 5
+    # Описание этого правила и его исключений будет в основном промпте агента
+    conditions: 
+      - type: "keyword_match"
+        keywords: ["hamster combat", "hmstr", "hamster kombat"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
+
+  - rule_id: "BALANCE_INQUIRY_STRICT"
+    priority: 10
+    conditions:
+      - type: "regex_match"
+        pattern: "what is my balance|how much (money|funds) do i have|check my balance"
+        # case_sensitive для regex обычно управляется самим паттерном, например (?i)
+    action: "reply"
+    action_params:
+      system_prompt_key: "get_balance_inquiry_detailed"
+
+  - rule_id: "FAREWELL"
+    priority: 100
+    conditions:
+      - type: "keyword_match"
+        keywords: ["bye", "goodbye", "thanks", "thank you", "see you"]
+        match_type: "any"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "You're welcome! Have a great day!"
+
   - rule_id: "hamster_withdraw"
     priority: 10
     conditions:
