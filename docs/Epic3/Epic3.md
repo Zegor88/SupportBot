@@ -42,7 +42,7 @@
     *   Если правило не найдено, определить поведение по умолчанию (например, `reply` с дефолтным `system_prompt_key` или специальный `action: "default_reply"`).
 *   **E3.2.3:** Определить структуру `RouterDecision` (например, Pydantic модель), возвращаемую `RouterAgent`, содержащую: `action: Literal["reply", "forward", "drop", "default_reply"]`, `matched_rule_id: Optional[str]`, `params: Optional[dict]` (e.g. `response_text`, `system_prompt_key`, `dst_chat_id`).
 
-### E3.3: Реализация действий (Reply Handoff, Forward Tool, Drop)
+### [ЗАВЕРШЕНО] E3.3: Реализация действий (Reply Handoff, Forward Tool, Drop)
 *   **E3.3.1: Действие `drop`**:
     *   `RouterAgent` возвращает `RouterDecision` с `action="drop"`. Основной цикл обработки прекращает дальнейшую работу с сообщением.
 *   **E3.3.2: Действие `forward`**:
@@ -57,7 +57,7 @@
     *   Продумать и описать данные, которые будут передаваться в `AnswerAgent` через `handoff()` в случае, если требуется генерация ответа LLM. Pydantic модель `ReplyHandoffData(BaseModel): user_message: str, history: list, system_prompt: str` (или `system_prompt_key`).
     *   Интегрировать вызов `handoff(agent=answer_agent_placeholder, input_type=ReplyHandoffData, ...)` в вызывающий код после получения решения от `RouterAgent`, если `RouterDecision` предполагает генерацию ответа через `AnswerAgent`. `answer_agent_placeholder` будет заменен на реальный `AnswerAgent` в Эпике 5.
 
-### E3.4: Реализация команды `/reload_rules`
+### [ЗАВЕРШЕНО] E3.4: Реализация команды `/reload_rules`
 *   **E3.4.1:** Добавить обработчик команды `/reload_rules` в `src/handlers.py` (или где определены Telegram-хендлеры).
 *   **E3.4.2:** Обработчик команды должен вызывать метод `rules_manager.reload_rules()`.
 *   **E3.4.3:** Обеспечить обратную связь пользователю о результате выполнения команды (успех/ошибка загрузки).

@@ -22,27 +22,6 @@ rules:
     action_params:
       response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
 
-  - rule_id: "BALANCE_INQUIRY_STRICT"
-    priority: 10
-    conditions:
-      - type: "regex_match"
-        pattern: "what is my balance|how much (money|funds) do i have|check my balance"
-        # case_sensitive для regex обычно управляется самим паттерном, например (?i)
-    action: "reply"
-    action_params:
-      system_prompt_key: "get_balance_inquiry_detailed"
-
-  - rule_id: "FAREWELL"
-    priority: 100
-    conditions:
-      - type: "keyword_match"
-        keywords: ["bye", "goodbye", "thanks", "thank you", "see you"]
-        match_type: "any"
-        case_sensitive: false
-    action: "reply"
-    action_params:
-      response_text: "You're welcome! Have a great day!"
-
   - rule_id: "hamster_withdraw"
     priority: 10
     conditions:
@@ -76,25 +55,6 @@ rules:
     action_params:
       response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
 
-  - rule_id: "forward_urgent_issue"
-    priority: 5 # Высокий приоритет
-    conditions:
-      - type: "regex_match"
-        pattern: "(?i)urgent|critical|blocker|immediate assistance"
-    action: "forward"
-    action_params:
-      destination_chat_id: "@urgent_support_team_test" # Замените на реальный канал
-
-  - rule_id: "drop_spam_keywords"
-    priority: 1 # Самый высокий приоритет для отсева спама
-    conditions:
-      - type: "keyword_match"
-        keywords: ["buy cheap followers", "crypto pump group", "guaranteed profit", "100x coin"]
-        match_type: "any"
-        case_sensitive: false
-    action: "drop"
-    action_params: {} # Пустые параметры для drop
-
   - rule_id: "reply_with_faq_prompt_greeting"
     priority: 100
     conditions:
@@ -116,3 +76,49 @@ rules:
     action: "reply"
     action_params:
       system_prompt_key: "general_faq_prompt" 
+
+  - rule_id: "test_drop_action"
+    priority: 100 # Низкий приоритет, чтобы не перекрывать другие важные правила
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test drop please"]
+        match_type: "all"
+        case_sensitive: false
+    action: "drop"
+    action_params: {}
+
+  - rule_id: "test_forward_action"
+    priority: 101
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test forward please"]
+        match_type: "all"
+        case_sensitive: false
+    action: "forward"
+    action_params:
+      # ВАЖНО: Замените "YOUR_TARGET_CHAT_ID" на реальный ID чата (или @username канала/группы),
+      # куда бот имеет право писать и куда вы хотите переслать сообщение.
+      # Это может быть ID другого вашего аккаунта, тестовой группы или канала.
+      destination_chat_id: "-1002548823433" 
+
+  - rule_id: "test_direct_reply_action"
+    priority: 102
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test direct reply please"]
+        match_type: "all"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      response_text: "This is a direct reply test. It worked!"
+
+  - rule_id: "test_handoff_reply_action"
+    priority: 103
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test handoff reply please"]
+        match_type: "all"
+        case_sensitive: false
+    action: "reply"
+    action_params:
+      system_prompt_key: "test_handoff_prompt" # Не важно, какой ключ, главное, что он есть 

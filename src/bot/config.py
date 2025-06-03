@@ -16,11 +16,29 @@ logging.basicConfig(
     ]
 )
 
+# Уменьшаем вербозность для слишком "болтливых" библиотек
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+# Если есть другие библиотеки, которые много логируют, их тоже можно добавить сюда
+# например, для telegram.ext, если потребуется:
+# logging.getLogger("telegram.ext").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 class Config:
     """Класс для хранения конфигурации бота."""
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+    ADMIN_USER_IDS_RAW = os.getenv('ADMIN_USER_IDS', '') # Пример: "12345,67890"
+    ADMIN_USER_IDS = []
+    if ADMIN_USER_IDS_RAW:
+        try:
+            ADMIN_USER_IDS = [int(admin_id.strip()) for admin_id in ADMIN_USER_IDS_RAW.split(',') if admin_id.strip()]
+            logger.info(f"Загружены ID администраторов: {ADMIN_USER_IDS}")
+        except ValueError:
+            logger.error(f"Некорректный формат ADMIN_USER_IDS: '{ADMIN_USER_IDS_RAW}'. Ожидались ID через запятую, например, '12345,67890'. Список администраторов будет пустым.")
+            ADMIN_USER_IDS = []
+    else:
+        logger.warning("Переменная окружения ADMIN_USER_IDS не установлена или пуста. Команды администрирования будут недоступны.")
 
     @staticmethod
     def validate_token():

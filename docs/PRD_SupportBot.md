@@ -96,32 +96,33 @@ Env Mgmt	python-dotenv	безопасность
 ### ValidatorAgent
 **Роль**: Первичная фильтрация и валидация входящих сообщений.
 **Ответственности**:
-- Определение языка сообщения (только английский в v1)
-- Проверка на токсичность/спам
-- Блокировка неприемлемого контента
+- Определение языка сообщения (только английский в v1) с использованием OpenAI API.
+- Обработка результата валидации и ответ пользователю на не-английском языке.
 **Техники**:
-- FastText для определения языка
-- OpenAI moderation API для проверки контента
+- OpenAI API (например, gpt-4o-mini) для определения языка через `LanguageValidatorAgentWrapper`.
 **Взаимодействие**:
-- Входные данные: raw message из Telegram
-- Выходные данные: validated message или rejection response
-- Следующий агент: RouterAgent (если валидация пройдена)
+- Входные данные: текстовое сообщение пользователя из Telegram.
+- Выходные данные: `LanguageValidationResult` (is_english, detected_language). Если не английский, отправляется стандартизированный ответ, и обработка прекращается.
+- Следующий агент: `RouterAgent` (если валидация языка пройдена или ошибка валидации обработана как "продолжить").
 
 ### RouterAgent
 **Роль**: Определение способа обработки сообщения на основе YAML-правил.
 **Ответственности**:
-- Загрузка и применение правил маршрутизации
-- Анализ сообщения на соответствие условиям правил
-- Принятие решения о действии (reply/forward/drop)
-- Подготовка system prompt для AnswerAgent (если требуется)
+- Получение правил от `RulesManager`.
+- Анализ сообщения пользователя с помощью OpenAI API (например, gpt-4o-mini) и динамически формируемых инструкций, включающих все правила в JSON-формате.
+- Принятие решения о действии (`reply`/`forward`/`drop`/`default_reply`) на основе ответа LLM, который должен вернуть JSON со структурой `RouterDecision`.
+- Подготовка параметров для выполнения действия (например, `response_text`, `system_prompt_key` для `reply`; `destination_chat_id` для `forward`).
 **Техники**:
-- Regex/keyword matching для анализа сообщений
-- Приоритезация правил
-- Динамическая перезагрузка правил
+- OpenAI Agent SDK (`agents.Agent`, `agents.Runner`).
+- Динамические инструкции для LLM, включающие сериализованные правила.
+- Парсинг JSON-ответа от LLM для получения `RouterDecision`.
 **Взаимодействие**:
-- Входные данные: validated message
-- Выходные данные: RouterDecision (action + параметры)
-- Следующий агент: RetrieverAgent (для reply) или прямое действие (для forward/drop)
+- Входные данные: текстовое сообщение пользователя (после `ValidatorAgent`).
+- Выходные данные: `RouterDecision` (action + параметры).
+- Следующий этап: Выполнение действия в основном обработчике сообщений (`handlers.py`):
+    - `drop`: прекращение обработки.
+    - `forward`: использование `ForwardTool` для пересылки сообщения.
+    - `reply`: либо прямой ответ текстом из `response_text`, либо подготовка `ReplyHandoffData` с `system_prompt_key` для будущего `AnswerAgent`.
 
 ### RetrieverAgent
 **Роль**: Поиск релевантного контекста для генерации ответа.
@@ -172,34 +173,55 @@ Env Mgmt	python-dotenv	безопасность
 
 ```mermaid
 graph TD
-    TG[Telegram] --> VA[ValidatorAgent]
-    VA --> |valid| RA[RouterAgent]
-    VA --> |invalid| TG
+    TG[Telegram Message] --> HVH[Handlers (handlers.py)]
     
-    RM[RulesManager] --> |rules| RA
-    RA --> |reload_rules| RM
-    
-    RA --> |reply| RTA[RetrieverAgent]
-    RA --> |forward| TG
-    RA --> |drop| END[End]
-    RTA --> AA[AnswerAgent]
-    AA --> TG
-    
-    LA[LoggerAgent] --> |logs| DB[(SQLite)]
-    VA -.-> |events| LA
-    RA -.-> |events| LA
-    RTA -.-> |events| LA
-    AA -.-> |events| LA
-    RM -.-> |rule operations| LA
+    subgraph "Message Handling in handlers.py"
+        HVH --> VA[ValidatorAgent]
+        VA -- "LanguageValidationResult (is_english=false)" --> HVH
+        HVH -- "Reply non-English" --> TG_REPLY[Telegram Reply]
+        
+        VA -- "LanguageValidationResult (is_english=true)" --> RA_CALLER{Call RouterAgent}
+        RA_CALLER --> RA[RouterAgent]
+        
+        subgraph "Rules Subsystem"
+            YAML[rules.yaml] -- load/reload --> RM[RulesManager]
+            RM -- get_rules() --> RA_PROMPT[Dynamic Prompt Construction for RA]
+            RA_PROMPT --> RA
+        end
 
-    subgraph Rules Management
-        RM
-        YAML[rules.yaml] --> |load| RM
-        ADMIN[Admin] --> |/reload_rules| RM
+        RA -- "RouterDecision (JSON String)" --> RD_PARSER{Parse RouterDecision}
+        RD_PARSER -- "RouterDecision (Pydantic)" --> ACTION_HANDLER{Action Handler}
+
+        ACTION_HANDLER -- "action: drop" --> LOG_DROP[Log Drop]
+        LOG_DROP --> END_DROP[End Processing]
+        
+        ACTION_HANDLER -- "action: forward" --> FT_CALLER{Call ForwardTool}
+        FT_CALLER --> FT[ForwardTool]
+        FT -- forward_message() --> TG_FORWARD[Telegram Forward]
+        FT -- result --> LOG_FWD[Log Forward]
+        LOG_FWD --> END_FWD[End Processing]
+
+        ACTION_HANDLER -- "action: reply" --> REPLY_LOGIC{Reply Logic}
+        REPLY_LOGIC -- "has response_text" --> TG_DIRECT_REPLY[Telegram Direct Reply]
+        REPLY_LOGIC -- "has system_prompt_key" --> PHD_PREP{Prepare ReplyHandoffData}
+        PHD_PREP --> LOG_HANDOFF_PREP[Log Handoff Prep]
+        LOG_HANDOFF_PREP --> AA_PLACEHOLDER[AnswerAgent (Placeholder for E5)]
+        AA_PLACEHOLDER -.-> TG_REPLY_AA[Telegram Reply (via AnswerAgent in future)]
+        TG_DIRECT_REPLY --> LOG_REPLY[Log Reply]
+        LOG_REPLY --> END_REPLY[End Processing]
     end
+    
+    %% LoggerAgent получает события от всех компонентов, опущено для упрощения основной схемы потока
+    %% LA[LoggerAgent] --> |logs| DB[(SQLite)]
+    %% VA -.-> |events| LA
+    %% RA -.-> |events| LA
+    %% RM -.-> |rule operations| LA
 
     style RM fill:#f9f,stroke:#333,stroke-width:2px
-    style Rules Management fill:#f5f5f5,stroke:#666,stroke-width:1px
+    style Rules Subsystem fill:#f5f5f5,stroke:#666,stroke-width:1px
+    style ValidatorAgent fill:#ccf,stroke:#333,stroke-width:2px
+    style RouterAgent fill:#cfc,stroke:#333,stroke-width:2px
+    style ForwardTool fill:#fcf,stroke:#333,stroke-width:2px
 ```
 
 ## 8.4. Расширяемость
