@@ -1,7 +1,7 @@
 import logging
 
-from bot.config import logger # Импортируем настроенный логгер
-from bot.telegram_bot import TelegramBot, Config
+from src.bot.config import logger # Импортируем настроенный логгер
+from src.bot.telegram_bot import TelegramBot, Config
 
 def main():
     """Основная синхронная функция для запуска бота."""

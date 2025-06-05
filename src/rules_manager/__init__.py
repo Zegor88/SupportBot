@@ -1,3 +1,6 @@
+"""
+Rules manager package for handling routing rules
+"""
 from .models import (
     ActionType,
     ConditionType,

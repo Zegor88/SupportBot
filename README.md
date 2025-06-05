@@ -225,6 +225,35 @@ support-bot/
 └── scripts/        # Вспомогательные скрипты
 ```
 
+### Структура импортов
+
+При разработке важно соблюдать правильную структуру импортов:
+
+1. В точке входа (`src/main.py`) используйте абсолютные импорты:
+```python
+from src.bot.config import logger
+from src.bot.telegram_bot import TelegramBot, Config
+```
+
+2. В остальных модулях используйте относительные импорты для модулей из того же пакета:
+```python
+from .config import Config, logger  # импорт из того же пакета
+```
+
+3. Запуск бота:
+```bash
+poetry run python src/main.py
+```
+
+#### Примечание о PYTHONPATH
+
+PYTHONPATH - это переменная окружения, которая указывает Python, где искать модули для импорта. В нашем проекте мы настроили правильную структуру пакета через `pyproject.toml` (секция `packages = [{include = "src"}]`), поэтому нет необходимости вручную управлять PYTHONPATH.
+
+#### Возможные проблемы
+
+- **ModuleNotFoundError: No module named 'src'**: Убедитесь, что вы установили проект в режиме разработки через `poetry install`.
+- **ImportError: attempted relative import beyond top-level package**: Возникает при попытке использовать относительные импорты в точке входа (`main.py`). В `main.py` всегда используйте абсолютные импорты.
+
 ## Лицензия
 
 Этот проект лицензирован под MIT License - см. файл [LICENSE](LICENSE) для деталей. 
