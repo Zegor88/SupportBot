@@ -2,7 +2,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 import logging
 
 from .config import Config, logger
-from .handlers import start, help_command, handle_text_message, reload_rules_command # Добавляем reload_rules_command
+from .handlers import start, help_command, handle_text_message, reload_rules_command
+from ..utils.memory_manager import MemoryManager  # Добавляем импорт MemoryManager
 
 class TelegramBot:
     def __init__(self, token: str):
@@ -11,18 +12,26 @@ class TelegramBot:
             raise ValueError("Токен не может быть пустым")
         self.token = token
         self.application = Application.builder().token(self.token).build()
+        self.memory_manager = MemoryManager()  # Инициализируем менеджер памяти
         self._register_handlers()
         logger.info("Telegram бот инициализирован.")
 
     def _register_handlers(self):
         """Регистрирует обработчики команд и сообщений."""
-        self.application.add_handler(CommandHandler("start", start))
-        self.application.add_handler(CommandHandler("help", help_command))
-        
-        # Для Task E1 (echo) регистрируем echo handler
-        # В будущих задачах здесь будет более сложная логика MessageHandler
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-        self.application.add_handler(CommandHandler("reload_rules", reload_rules_command)) # Регистрируем новую команду
+        # Создаем замыкания для передачи memory_manager в обработчики
+        def handle_text_with_memory(update, context):
+            return handle_text_message(update, context, self.memory_manager)
+
+        def start_with_memory(update, context):
+            return start(update, context, self.memory_manager)
+
+        def help_with_memory(update, context):
+            return help_command(update, context, self.memory_manager)
+
+        self.application.add_handler(CommandHandler("start", start_with_memory))
+        self.application.add_handler(CommandHandler("help", help_with_memory))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_with_memory))
+        self.application.add_handler(CommandHandler("reload_rules", reload_rules_command))
         
         logger.info("Обработчики команд зарегистрированы.")
 
@@ -49,8 +58,5 @@ def main():
         logger.critical(f"Непредвиденная ошибка при запуске бота: {e}", exc_info=True)
 
 if __name__ == '__main__':
-    # Этот блок не будет выполняться при импорте, 
-    # но полезен для прямого запуска этого файла для отладки (если потребуется).
-    # Однако, рекомендуется создать отдельный main.py в корне src/ для запуска.
     logger.warning("telegram_bot.py запущен напрямую. Рекомендуется использовать src/main.py для запуска.")
     main() 

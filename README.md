@@ -6,14 +6,6 @@
 
 Support Bot - это интеллектуальный помощник, который автоматизирует процесс поддержки пользователей через Telegram. Бот использует современные технологии обработки естественного языка для понимания запросов пользователей и предоставления релевантных ответов.
 
-### Основные возможности
-
-- Автоматическая обработка часто задаваемых вопросов
-- Интеграция с базой знаний
-- Умная маршрутизация запросов к живым операторам
-- Аналитика и отчетность по обращениям
-- Валидация языка сообщений (только английский язык)
-
 ### Маршрутизация запросов и `rules.yaml`
 
 Одной из ключевых функций бота является гибкая маршрутизация входящих сообщений на основе набора правил, определенных в файле `rules.yaml`. Это позволяет настроить поведение бота для различных типов запросов без изменения кода.
@@ -41,7 +33,7 @@ Support Bot - это интеллектуальный помощник, кото
                 *   `any`: Условие истинно, если найдено хотя бы одно слово из `keywords`.
                 *   `all`: Условие истинно, если найдены все слова из `keywords`.
             *   `case_sensitive` (булево, опционально, по умолчанию `false`): Учитывать ли регистр при поиске ключевых слов.
-        *   **`regex_match`**: Поиск по регулярному выражению.
+        *   **`regex_match`**: Поиск по регулярному выражению (например: `(комбо|combo|карточк[иа])\s*(какие|какая|каких|обновились)`).
             *   `pattern` (строка, обязательное): Регулярное выражение для поиска.
 *   `action` (строка, обязательное): Действие, которое выполнится, если правило сработало. Допустимые значения:
     *   `reply`: Ответить на сообщение.
@@ -56,86 +48,6 @@ Support Bot - это интеллектуальный помощник, кото
         *   `destination_chat_id` (строка, обязательное): ID чата (пользователя или группы) в Telegram, куда будет переслано сообщение.
     *   Для `action: drop`:
         *   Может быть пустым объектом `{}`. Никаких дополнительных параметров не требуется.
-
-#### Пример `rules.yaml`
-
-```yaml
-rules:
-  - rule_id: "hamster_greeting"
-    priority: 1
-    conditions:
-      - type: "keyword_match"
-        keywords: ["hamster", "хом як", "хомяк"]
-        match_type: "any"
-        case_sensitive: false
-      - type: "keyword_match"
-        keywords: ["привет", "здравствуй", "hello", "hi"]
-        match_type: "any"
-        case_sensitive: false
-    action: "reply"
-    action_params:
-      response_text: "Привет! Вижу, у вас вопрос по Hamster Combat. Задавайте!"
-
-  - rule_id: "specific_hamster_issue"
-    priority: 5
-    conditions:
-      - type: "regex_match"
-        pattern: "(комбо|combo|карточк[иа])\s*(какие|какая|каких|обновились)"
-        case_sensitive: false
-      - type: "keyword_match"
-        keywords: ["hamster", "хом як"]
-        match_type: "any"
-    action: "reply"
-    action_params:
-      system_prompt_key: "hamster_combo_cards" # Этот ключ будет использован для получения промпта
-
-  - rule_id: "forward_urgent_to_admin"
-    priority: 10
-    conditions:
-      - type: "keyword_match"
-        keywords: ["срочно", "важно", "помогите", "sos"]
-        match_type: "any"
-    action: "forward"
-    action_params:
-      destination_chat_id: "YOUR_ADMIN_CHAT_ID" # Замените на реальный ID
-
-  - rule_id: "drop_spam"
-    priority: 100
-    conditions:
-      - type: "regex_match"
-        pattern: "купить\s*виллу|заработок\s*онлайн"
-        case_sensitive: false
-    action: "drop"
-    action_params: {}
-```
-
-#### Пример использования `RulesManager`
-
-```python
-from src.rules_manager.manager import RulesManager
-from src.rules_manager.exceptions import RulesFileError
-
-try:
-    # Путь к файлу rules.yaml (может быть относительным или абсолютным)
-    rules_path = "rules.yaml" 
-    rules_manager = RulesManager(rules_path)
-
-    # Получение всех правил
-    all_rules = rules_manager.get_rules()
-    # print(f"Загружено правил: {len(all_rules)}")
-
-    # Пример поиска правила по ID (если необходимо)
-    # rule = rules_manager.get_rule_by_id("hamster_greeting")
-    # if rule:
-    #     print(f"Найдено правило: {rule.rule_id}, Приоритет: {rule.priority}")
-
-except RulesFileError as e:
-    print(f"Ошибка загрузки или валидации файла правил: {e}")
-    # Здесь должна быть логика обработки ошибки, например, логирование и выход
-except FileNotFoundError:
-    print(f"Файл правил по пути '{rules_path}' не найден.")
-    # Аналогично, обработка ошибки
-```
 
 ## Требования
 
@@ -192,20 +104,82 @@ ADMIN_USER_IDS=12345678,98765432 # ID администраторов через 
 poetry run python src/main.py
 ```
 
+### Схема обработки сообщений
+
+```mermaid
+flowchart TD
+    Z1[Администратор] -->|Управляет| Z2[rules.yaml]
+    
+    A[Получено сообщение] --> B{Проверка типа сообщения}
+    B -->|Текстовое сообщение| C[LanguageValidatorAgent]
+    B -->|Команда| D[Обработка команд]
+    D -->|/start| D1[Приветствие]
+    D -->|/help| D2[Справка]
+    B -->|Другое| E[Игнорировать]
+    
+    C --> F["Определение языка (REVISED_LANGUAGE_VALIDATOR_PROMPT)"]
+    F -->|Английский| G[Продолжить обработку]
+    F -->|Не английский| H[Отправить сообщение о языке]
+    F -->|Ошибка валидации| I[Логирование ошибки]
+    I --> G
+    
+    Z2 -->|Правила маршрутизации| J[RouterAgent]
+    G --> J
+    J -->|Действие + Поведенческий промпт| K{Тип действия}
+    K -->|drop| L[Игнорировать]
+    K -->|forward| M[Переслать сообщение]
+    K -->|reply| N[Подготовка ответа]
+    
+    N --> O{Тип ответа}
+    O -->|response_text| P[Отправить текст]
+    O -->|system_prompt_key| Q[RAG-пайплайн]
+    
+    Q --> R[RetrieverAgent]
+    R --> S[AnswerAgent]
+    S --> T[Отправить ответ]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style C fill:#bbf,stroke:#333,stroke-width:2px
+    style F fill:#dfd,stroke:#333,stroke-width:2px
+    style D1 fill:#ffd,stroke:#333,stroke-width:2px
+    style D2 fill:#ffd,stroke:#333,stroke-width:2px
+    style H fill:#ffd,stroke:#333,stroke-width:2px
+    style E fill:#fdd,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style L fill:#fdd,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style P fill:#ffd,stroke:#333,stroke-width:2px
+    style T fill:#ffd,stroke:#333,stroke-width:2px
+```
+
 После запуска бот будет готов принимать команды (`/start`, `/help`).
 При получении текстового сообщения бот выполняет следующую последовательность действий:
-1.  **Валидация языка**: Сообщение проверяется `LanguageValidatorAgent` (использующим OpenAI API, например, `gpt-4o-mini`).
-    *   Если язык не английский, бот отправит сообщение: "This chat is for English language communication. You texted me in [Обнаруженный язык]. Please rephrase your question in English."
-    *   Если язык английский (или произошла ошибка валидации, но система настроена продолжать), сообщение передается дальше.
-2.  **Маршрутизация (`RouterAgent`)**: 
-    *   `RouterAgent` (также использующий OpenAI API, например, `gpt-4o-mini`) анализирует текст сообщения и, на основе динамически загружаемых инструкций и правил из `rules.yaml` (предоставляемых `RulesManager`), определяет необходимое действие.
-    *   Инструкции для `RouterAgent` включают JSON-представление всех доступных правил, что позволяет LLM принимать решение о наилучшем совпавшем правиле.
-3.  **Выполнение действия**:
-    *   **`drop`**: Если `RouterAgent` решил игнорировать сообщение, дальнейшая обработка прекращается.
-    *   **`forward`**: Если необходимо переслать сообщение, используется `ForwardTool` (`src/tools/telegram_tools.py`), который пересылает оригинальное сообщение в указанный в правиле `destination_chat_id`.
-    *   **`reply`**: 
-        *   Если правило содержит `response_text`, этот текст отправляется пользователю напрямую.
-        *   Если правило содержит `system_prompt_key`, подготавливаются данные (`ReplyHandoffData`) для будущего `AnswerAgent` (который будет генерировать ответ с помощью LLM на основе этого ключа промпта). На текущем этапе пользователю отправляется сообщение-заглушка о том, что его запрос обрабатывается.
+
+1. **Валидация языка**: 
+   - Сообщение проверяется `LanguageValidatorAgent` (использующим OpenAI API, например, `gpt-4o-mini`).
+   - Если язык не английский, бот отправит сообщение: "This chat is for English language communication. You texted me in [Обнаруженный язык]. Please rephrase your question in English."
+   - Если язык английский (или произошла ошибка валидации, но система настроена продолжать), сообщение передается дальше.
+   - Все результаты валидации логируются через `Logger`.
+
+2. **Маршрутизация (`RouterAgent`)**: 
+   - `RouterAgent` (также использующий OpenAI API, например, `gpt-4o-mini`) анализирует текст сообщения.
+   - На основе динамически загружаемых инструкций и правил из `rules.yaml` (предоставляемых `RulesManager`), определяет необходимое действие.
+   - Инструкции для `RouterAgent` включают JSON-представление всех доступных правил.
+   - Решение роутера включает не только тип действия, но и поведенческий промпт, определяющий стиль и контекст ответа.
+   - Решение роутера валидируется через Pydantic модель `RouterDecision`.
+
+3. **Выполнение действия**:
+   - **`drop`**: Если `RouterAgent` решил игнорировать сообщение, дальнейшая обработка прекращается.
+   - **`forward`**: Если необходимо переслать сообщение, используется `ForwardTool` (`src/tools/telegram_tools.py`).
+   - **`reply`**: 
+     - Если правило содержит `response_text`, этот текст отправляется пользователю напрямую.
+     - Если правило содержит `system_prompt_key`, запускается RAG-пайплайн:
+       1. `RetrieverAgent` ищет релевантный контекст в базе знаний.
+       2. Контекст (если найден) вместе с исходным сообщением и ключом промпта передается в `AnswerAgent`.
+       3. `AnswerAgent` генерирует ответ на основе всей полученной информации.
+
+4. **Логирование**:
+   - Все этапы обработки сообщения логируются через `Logger`.
+   - Для каждого взаимодействия создается структурированный лог через `InteractionLog`.
+   - Ошибки на любом этапе обрабатываются и логируются, не прерывая работу бота.
 
 Это поведение актуально как для личных сообщений, так и для групп, куда добавлен бот.
 
@@ -219,10 +193,52 @@ poetry run python src/main.py
 
 ```
 support-bot/
-├── src/            # Исходный код
-├── tests/          # Тесты
-├── docs/           # Документация
-└── scripts/        # Вспомогательные скрипты
+├── src/                    # Исходный код
+│   ├── bot/               # Основной модуль бота
+│   │   ├── config.py      # Конфигурация бота
+│   │   ├── handlers.py    # Обработчики сообщений
+│   │   ├── telegram_bot.py # Основной класс бота
+│   │   └── utils.py       # Утилиты для бота
+│   │
+│   ├── bot_agents/        # Агенты на базе OpenAI Agent SDK
+│   │   ├── language_validator_agent.py  # Валидация языка
+│   │   ├── router_agent.py             # Маршрутизация сообщений
+│   │   ├── retriever_agent.py          # Поиск в базе знаний
+│   │   ├── answer_agent.py             # Генерация ответов
+│   │   └── models.py                   # Pydantic модели
+│   │
+│   ├── utils/             # Общие утилиты
+│   │   ├── logger.py      # Логирование
+│   │   ├── embeddings.py  # Работа с эмбеддингами
+│   │   ├── rag_retriever.py # RAG компоненты
+│   │   └── response_generator.py # Генерация ответов
+│   │
+│   ├── rules_manager/     # Управление правилами
+│   │   ├── manager.py     # Менеджер правил
+│   │   └── models.py      # Модели правил
+│   │
+│   ├── tools/             # Инструменты
+│   │   └── telegram_tools.py # Инструменты для Telegram
+│   │
+│   └── main.py            # Точка входа
+│
+├── tests/                 # Тесты
+│   ├── agents/           # Тесты агентов
+│   └── rules_manager/    # Тесты менеджера правил
+│
+├── docs/                  # Документация
+│   ├── Epic0/            # Документация по Epic 0
+│   ├── Epic1/            # Документация по Epic 1
+│   └── ...               # Другие эпики
+│
+├── data/                  # Данные
+│   └── vectorstore/      # Векторное хранилище
+│
+├── poetry.lock           # Файл блокировки зависимостей
+├── pyproject.toml        # Конфигурация Poetry
+├── rules.yaml           # Правила маршрутизации
+├── prompts.yaml         # Промпты для агентов
+└── README.md            # Документация проекта
 ```
 
 ### Структура импортов

@@ -1,3 +1,7 @@
+# src/bot/config.py
+# This file contains the configuration for the bot.
+# It is used to load the environment variables and configure the logging.
+
 import os
 import logging
 from dotenv import load_dotenv
@@ -9,19 +13,14 @@ load_dotenv()
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S%z',
     handlers=[
         logging.StreamHandler() # Вывод в консоль
-        # Можно добавить FileHandler для записи в файл
-        # logging.FileHandler('bot.log') 
     ]
 )
 
-# Уменьшаем вербозность для слишком "болтливых" библиотек
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
-# Если есть другие библиотеки, которые много логируют, их тоже можно добавить сюда
-# например, для telegram.ext, если потребуется:
-# logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 

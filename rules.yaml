@@ -1,18 +1,31 @@
+# src/rules.yaml
+# This file contains the rules for the bot.
+
 rules:
-  - rule_id: "GREETING"
+  # --- Behavioral Rules (these add context and allow processing to continue) ---
+  - rule_id: "BEHAVIOR_GREETING"
     priority: 1
+    continue_on_match: true # This makes the rule non-terminal
     conditions:
-      - type: "keyword_match"
-        keywords: ["hello", "hi", "hey", "greetings"]
-        match_type: "any"
-        case_sensitive: false
+      - type: "description_match"
+        description: "The user's message contains a greeting (e.g., 'hi', 'hello', 'good morning')."
     action: "reply"
     action_params:
-      response_text: "Hello there! This is your Router Agent. How can I assist you?"
+      behavioral_prompts:
+        - "The user started with a greeting. Greet them back warmly before addressing their main query."
+
+  # --- Terminal Rules (these stop processing and define the final action) ---
+  - rule_id: "FAREWELL"
+    priority: 10
+    conditions:
+      - type: "description_match"
+        description: "The user says goodbye to the bot, says thanks and ends the conversation, etc."
+    action: "reply"
+    action_params:
+      response_text: "You are welcome! Have a great day."
 
   - rule_id: "HAMSTER_COMBAT_SUPPORT_REDIRECT"
-    priority: 5
-    # Описание этого правила и его исключений будет в основном промпте агента
+    priority: 20
     conditions: 
       - type: "keyword_match"
         keywords: ["hamster combat", "hmstr", "hamster kombat"]
@@ -23,102 +36,54 @@ rules:
       response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
 
   - rule_id: "hamster_withdraw"
-    priority: 10
+    priority: 21
     conditions:
       - type: "keyword_match"
-        keywords: ["withdraw", "reward", "hamster", "boost"]
-        match_type: "all" # Все слова должны присутствовать
-        case_sensitive: false
-      - type: "keyword_match" # Дополнительное условие, чтобы убедиться, что речь именно о выводе
-        keywords: ["how to", "how do i", "can i", "where is my"]
+        keywords: ["hamster combat", "hmstr", "hamster kombat"]
         match_type: "any"
         case_sensitive: false
+      - type: "description_match"
+        description: "The user is asking how to withdraw funds, get a reward, or use a boost."
     action: "reply"
     action_params:
       response_text: "Hello! If you have received a reward in Hamster Boost, follow these instructions: https://t.me/broxus_chat/26814"
-
-  - rule_id: "hamster_other_support"
-    priority: 11 # Немного ниже приоритет, чем у hamster_withdraw
-    conditions:
-      - type: "keyword_match"
-        keywords: ["hamster", "combat", "boost"] # Основные идентификаторы темы
-        match_type: "any"
-        case_sensitive: false
-      - type: "keyword_match" # Ключевые слова, указывающие на запрос поддержки, не связанный с выводом
-        keywords: ["support", "help", "tokenomics", "gameplay", "card", "how to play", "issue", "problem"]
-        match_type: "any"
-        case_sensitive: false
-      # Можно добавить условие с NOT MATCH на "withdraw", если бы YAML поддерживал такую сложную логику напрямую,
-      # но это обычно решается порядком правил или более специфичными условиями.
-      # Здесь приоритет и более общие ключевые слова для "withdraw" в правиле выше должны сработать первыми.
-    action: "reply"
-    action_params:
-      response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
-
-  - rule_id: "reply_with_faq_prompt_greeting"
-    priority: 100
-    conditions:
-      - type: "keyword_match"
-        keywords: ["hello", "hi", "hey", "greetings"]
-        match_type: "any"
-        case_sensitive: false
-    action: "reply"
-    action_params:
-      system_prompt_key: "greeting_general_prompt"
-
-  - rule_id: "reply_with_faq_prompt_how_to"
-    priority: 101
-    conditions:
-      - type: "keyword_match"
-        keywords: ["how to", "what is", "explain", "can you tell me about"]
-        match_type: "any"
-        case_sensitive: false
-    action: "reply"
-    action_params:
-      system_prompt_key: "general_faq_prompt" 
-
+      
+  # --- Test Rules ---
   - rule_id: "test_drop_action"
-    priority: 100 # Низкий приоритет, чтобы не перекрывать другие важные правила
+    priority: 200
     conditions:
       - type: "keyword_match"
         keywords: ["test drop please"]
         match_type: "all"
-        case_sensitive: false
     action: "drop"
     action_params: {}
 
   - rule_id: "test_forward_action"
-    priority: 101
+    priority: 201
     conditions:
       - type: "keyword_match"
         keywords: ["test forward please"]
         match_type: "all"
-        case_sensitive: false
     action: "forward"
     action_params:
-      # ВАЖНО: Замените "YOUR_TARGET_CHAT_ID" на реальный ID чата (или @username канала/группы),
-      # куда бот имеет право писать и куда вы хотите переслать сообщение.
-      # Это может быть ID другого вашего аккаунта, тестовой группы или канала.
       destination_chat_id: "-1002548823433" 
 
   - rule_id: "test_direct_reply_action"
-    priority: 102
+    priority: 202
     conditions:
       - type: "keyword_match"
         keywords: ["test direct reply please"]
         match_type: "all"
-        case_sensitive: false
     action: "reply"
     action_params:
       response_text: "This is a direct reply test. It worked!"
 
   - rule_id: "test_handoff_reply_action"
-    priority: 103
+    priority: 203
     conditions:
       - type: "keyword_match"
         keywords: ["test handoff reply please"]
         match_type: "all"
-        case_sensitive: false
     action: "reply"
     action_params:
-      system_prompt_key: "test_handoff_prompt" # Не важно, какой ключ, главное, что он есть 
+      system_prompt_key: "test_handoff_prompt" 

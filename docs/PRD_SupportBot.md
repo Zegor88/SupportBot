@@ -161,67 +161,52 @@ Env Mgmt	python-dotenv	безопасность
 - Сохранение диалогов и метаданных
 - Подготовка данных для аналитики
 **Техники**:
-- Асинхронная запись в SQLite
-- Структурированное логирование
-- Трассировка через OpenAI Agent SDK
+- Асинхронная запись в SQLite (реализовано в Эпике E6)
+- Структурированное логирование (реализовано в Эпике E4)
+- Трассировка через OpenAI Agent SDK (Примечание: Реализация отложена)
 **Взаимодействие**:
 - Входные данные: события от всех агентов
 - Выходные данные: записи в БД, логи
-- Интеграции: возможность экспорта в CSV
+- Интеграции: возможность экспорта в CSV (реализовано в Эпике E6)
 
 ## 8.3. Схема взаимодействия агентов
 
 ```mermaid
-graph TD
-    TG[Telegram Message] --> HVH[Handlers (handlers.py)]
+flowchart TD
+    TG[Telegram Message] --> HVH[Handlers]
     
-    subgraph "Message Handling in handlers.py"
+    subgraph MessageHandling
         HVH --> VA[ValidatorAgent]
-        VA -- "LanguageValidationResult (is_english=false)" --> HVH
+        VA -- "LanguageValidationResult" --> HVH
         HVH -- "Reply non-English" --> TG_REPLY[Telegram Reply]
         
-        VA -- "LanguageValidationResult (is_english=true)" --> RA_CALLER{Call RouterAgent}
-        RA_CALLER --> RA[RouterAgent]
+        VA -- "LanguageValidationResult" --> RA[RouterAgent]
         
-        subgraph "Rules Subsystem"
+        subgraph RulesSubsystem
             YAML[rules.yaml] -- load/reload --> RM[RulesManager]
-            RM -- get_rules() --> RA_PROMPT[Dynamic Prompt Construction for RA]
-            RA_PROMPT --> RA
+            RM -- get_rules --> RA
         end
 
-        RA -- "RouterDecision (JSON String)" --> RD_PARSER{Parse RouterDecision}
-        RD_PARSER -- "RouterDecision (Pydantic)" --> ACTION_HANDLER{Action Handler}
+     
 
-        ACTION_HANDLER -- "action: drop" --> LOG_DROP[Log Drop]
+        RA -- "drop" --> LOG_DROP[Log Drop]
         LOG_DROP --> END_DROP[End Processing]
         
-        ACTION_HANDLER -- "action: forward" --> FT_CALLER{Call ForwardTool}
-        FT_CALLER --> FT[ForwardTool]
-        FT -- forward_message() --> TG_FORWARD[Telegram Forward]
+        RA -- "forward" --> FT[ForwardTool]
+        FT -- forward_message --> TG_FORWARD[Telegram Forward]
         FT -- result --> LOG_FWD[Log Forward]
         LOG_FWD --> END_FWD[End Processing]
 
-        ACTION_HANDLER -- "action: reply" --> REPLY_LOGIC{Reply Logic}
-        REPLY_LOGIC -- "has response_text" --> TG_DIRECT_REPLY[Telegram Direct Reply]
-        REPLY_LOGIC -- "has system_prompt_key" --> PHD_PREP{Prepare ReplyHandoffData}
-        PHD_PREP --> LOG_HANDOFF_PREP[Log Handoff Prep]
-        LOG_HANDOFF_PREP --> AA_PLACEHOLDER[AnswerAgent (Placeholder for E5)]
-        AA_PLACEHOLDER -.-> TG_REPLY_AA[Telegram Reply (via AnswerAgent in future)]
+        RA -- "reply" --> REPLY_HANDLER{Reply Handler}
+        REPLY_HANDLER -- "has response_text" --> TG_DIRECT_REPLY[Telegram Direct Reply]
+        REPLY_HANDLER -- "has system_prompt_key" --> RAG[RetrieverAgent]
+        RAG -- "context" --> AA[AnswerAgent]
+        AA --> TG_REPLY_AA[Telegram Reply]
         TG_DIRECT_REPLY --> LOG_REPLY[Log Reply]
         LOG_REPLY --> END_REPLY[End Processing]
+        TG_REPLY_AA --> LOG_REPLY_AA[Log Generated Reply]
+        LOG_REPLY_AA --> END_REPLY_AA[End Processing]
     end
-    
-    %% LoggerAgent получает события от всех компонентов, опущено для упрощения основной схемы потока
-    %% LA[LoggerAgent] --> |logs| DB[(SQLite)]
-    %% VA -.-> |events| LA
-    %% RA -.-> |events| LA
-    %% RM -.-> |rule operations| LA
-
-    style RM fill:#f9f,stroke:#333,stroke-width:2px
-    style Rules Subsystem fill:#f5f5f5,stroke:#666,stroke-width:1px
-    style ValidatorAgent fill:#ccf,stroke:#333,stroke-width:2px
-    style RouterAgent fill:#cfc,stroke:#333,stroke-width:2px
-    style ForwardTool fill:#fcf,stroke:#333,stroke-width:2px
 ```
 
 ## 8.4. Расширяемость
@@ -357,8 +342,8 @@ E0. Git Repo & Среда	Централизованный код и reproducibl
 E1. Telegram Handler	Принимать сообщения и отвечать «echo»	Бот онлайн, echo ≤ 2 с	Создать Bot Token; async-хендлер MessageHandler; поддержать группы и DM
 E2. Validator	Фильтровать не-EN; заглушка-ответ
 E3. Router & Dynamic Instructions	Выбрать инструкцию и действие (reply/forward/drop)	100 % сообщений получают верный action	YAML-rules store; RouterAgent; команда /reload_rules; пересылка в dst_chat_id
-E4. Retrieval (RAG)	Достать релевантный контекст	top-3 Q&A < 200 мс	Загрузить answers_table.pkl; FAISS + OpenAIEmbeddings; get_context()
-E5. Answer Generation	Сформировать связный ответ	≥ 50 % кейсов закрыты ботом	Промпт: system_prompt+history+context; GPT-4o-mini; ответ ≤ 500 токенов
+E4. Answer Generation	Сформировать связный ответ	≥ 50 % кейсов закрыты ботом	Промпт: system_prompt+history+context; GPT-4o-mini; ответ ≤ 500 токенов
+E5. Retrieval (RAG)	Достать релевантный контекст	top-3 Q&A < 200 мс	Загрузить answers_table.pkl; FAISS + OpenAIEmbeddings; get_context(). Добавить полученный контекст в "Answer Generation" 
 E6. Logging	Хранить данные для улучшений	100 % диалогов в SQLite	Таблица dialogs; async-write; CSV-экспорт скрипт
 
 

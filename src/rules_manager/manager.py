@@ -1,3 +1,6 @@
+# src/rules_manager/manager.py
+# This file contains the RulesManager class, which is responsible for loading and managing the rules.
+
 import yaml
 import logging
 from typing import List, Optional
@@ -29,10 +32,8 @@ class RulesManager:
                  self._rules = []
                  return self._rules
 
-            # Валидация с помощью Pydantic моделей
-            config = RulesConfig(**raw_config) # Ожидаем структуру {'rules': [...]} 
+            config = RulesConfig(**raw_config)
             
-            # Сортировка правил по приоритету (меньшее значение - выше приоритет)
             self._rules = sorted(config.rules, key=lambda rule: rule.priority)
             
             logger.info(f"Successfully loaded and validated {len(self._rules)} rules from {self.rules_file_path}.")
@@ -54,18 +55,27 @@ class RulesManager:
     def get_rules(self) -> List[Rule]:
         return self._rules
 
+    def get_rule_by_id(self, rule_id: str) -> Optional[Rule]:
+        """Находит правило по его ID."""
+        if not rule_id:
+            return None
+        for rule in self._rules:
+            if rule.rule_id == rule_id:
+                return rule
+        return None
+
     def reload_rules(self) -> bool:
         logger.info(f"Attempting to reload rules from {self.rules_file_path}")
-        current_rules_backup = list(self._rules) # Создаем копию на случай ошибки
+        current_rules_backup = list(self._rules)
         try:
             self.load_rules()
             logger.info(f"Rules reloaded successfully. {len(self._rules)} rules are now active.")
             return True
         except RulesFileError as e:
             logger.error(f"Failed to reload rules: {e}. Restoring previous rule set ({len(current_rules_backup)} rules).")
-            self._rules = current_rules_backup # Восстанавливаем старые правила
+            self._rules = current_rules_backup
             return False
-        except Exception as e: # Ловим другие возможные ошибки при перезагрузке
+        except Exception as e:
             logger.error(f"An unexpected critical error occurred during rule reload: {e}. Restoring previous rule set ({len(current_rules_backup)} rules).")
             self._rules = current_rules_backup
             return False 

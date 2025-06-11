@@ -1,93 +1,116 @@
+# src/bot/handlers.py
+# This file contains the handlers for the bot.
+# It is used to handle the commands and messages from the users.
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
 import json # Для парсинга ответа RouterAgent
+from telegram.constants import ParseMode
+from datetime import datetime
 
 from .config import Config, logger # Оставим config logger, но будем использовать и стандартный logging
+
 # Импорты для агентов и моделей
-from src.bot_agents.language_validator_agent import LanguageValidatorAgentWrapper, LanguageValidationResult
-from src.bot_agents.router_agent import RouterAgent # Сам RouterAgent
-from src.bot_agents.models import RouterDecision, ReplyHandoffData # Модели
+from src.bot_agents import (
+    LanguageValidatorAgentWrapper,
+    RouterAgent,
+    RetrieverAgent,
+    answer_agent,
+    Logger as BotLogger,
+    InteractionLog,
+    RouterDecision,
+    ReplyHandoffData,
+    RouterDecisionParams
+)
 from src.rules_manager.manager import RulesManager, RulesFileError # Менеджер правил
 from src.tools.telegram_tools import ForwardTool # Инструмент для пересылки
 
 from agents import Runner # Runner из SDK для запуска RouterAgent
 
-# Настройка стандартного логгера, если еще не настроен глобально
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# --- Инициализация менеджера правил и RouterAgent ---
+# ========= 1. Инициализация =========
+# 1.1. Инициализация менеджера правил и RouterAgent
 try:
     rules_manager = RulesManager(rules_file_path="rules.yaml") # Путь к файлу правил
-    router_agent_instance = RouterAgent(rules_manager=rules_manager)
-    logger.info(f"RulesManager and RouterAgent initialized successfully with {len(rules_manager.get_rules())} rules.")
-except RulesFileError as e:
+    router_agent_instance = RouterAgent(rules_manager=rules_manager) # Инициализация RouterAgent
+    logger.info(f"RulesManager and RouterAgent initialized successfully with {len(rules_manager.get_rules())} rules.") # Логирование успешного инициализации
+except (RulesFileError, Exception) as e:
     logger.error(f"CRITICAL: Failed to initialize RulesManager or RouterAgent: {e}", exc_info=True)
-    # В случае ошибки инициализации, бот может работать некорректно или не сможет обрабатывать правила.
-    # Можно либо остановить бота, либо работать в ограниченном режиме.
-    rules_manager = None
-    router_agent_instance = None
-    # Добавим обработку ниже, чтобы бот сообщал об этой проблеме, если агенты не загружены
-except Exception as e:
-    logger.error(f"CRITICAL: Unexpected error during RulesManager/RouterAgent initialization: {e}", exc_info=True)
     rules_manager = None
     router_agent_instance = None
 
-# Инициализируем валидатор языка (Singleton)
-# Это создаст экземпляр при первом импорте модуля handlers
+# 1.2. Инициализация валидатора языка
 language_validator = LanguageValidatorAgentWrapper()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# 1.3. Инициализация агента логгирования
+logger_agent = BotLogger()
+
+# 1.4. Инициализация RetrieverAgent
+try:
+    retriever_agent = RetrieverAgent()
+    logger.info("RetrieverAgent initialized successfully.")
+except Exception as e:
+    retriever_agent = None
+    logger.error(f"CRITICAL: Failed to initialize RetrieverAgent: {e}", exc_info=True)
+
+# ========= 2. Обработчики =========
+# 2.1. Обработчик команды /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE, memory_manager=None) -> None:
     """Обработчик команды /start."""
-    logger.info(f"Получена команда /start от пользователя {update.effective_user.id}")
-    await update.message.reply_text(
-        f"Привет, {update.effective_user.first_name}! Я Support Bot. Готов помочь."
-    )
+    user_id = update.effective_user.id
+    logger.info(f"Received /start command from user {user_id}.")
+    
+    response = "Hello! I am a support bot. How can I help you?"
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Добавляем сообщение в память
+    if memory_manager:
+        memory_manager.add_message(user_id, "assistant", response)
+    
+    await update.message.reply_text(response)
+
+# 2.2. Обработчик команды /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, memory_manager=None) -> None:
     """Обработчик команды /help."""
-    logger.info(f"Получена команда /help от пользователя {update.effective_user.id}")
-    await update.message.reply_text(
-        "Я пока в разработке. Вот что я смогу делать (когда-нибудь):\n"
-        "- Отвечать на ваши вопросы\n"
-        "- Перенаправлять сложные запросы специалистам\n"
-        "Просто напишите мне ваш вопрос."
-    )
+    user_id = update.effective_user.id
+    logger.info(f"Received /help command from user {user_id}.")
+    
+    response = "You can ask me any questions, and I will do my best to help you."
 
-async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Добавляем сообщение в память
+    if memory_manager:
+        memory_manager.add_message(user_id, "assistant", response)
+    
+    await update.message.reply_text(response)
+
+# ========= 3. Обработчик всех текстовых сообщений =========
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE, memory_manager=None) -> None:
     """Обработчик для всех текстовых сообщений, включает валидацию языка."""
     user_id = update.effective_user.id
     text = update.message.text
     chat_type = update.message.chat.type
 
-    logger.info(f"Получено текстовое сообщение от {user_id} в чате типа '{chat_type}': '{text[:100]}...'")
+    logger.info(f"Received text message from {user_id}: '{text[:100]}...'")
+
+    # Добавляем сообщение в память
+    if memory_manager:
+        memory_manager.add_message(user_id, "user", text)
 
     # 1. Валидация языка
     try:
-        validation_result: LanguageValidationResult = await language_validator.validate_language(text)
-        logger.info(f"Результат валидации языка для user {user_id}: {validation_result}")
-
+        validation_result = await language_validator.validate_language(text)
         if not validation_result.is_english:
             detected_lang = validation_result.detected_language or "an unknown language"
-            reply_message = (
-                f"This chat is for English language communication. "
-                f"You texted me in {detected_lang}. Please rephrase your question in English."
-            )
-            logger.info(f"Отправка заглушки о языке пользователю {user_id}: {reply_message}")
+            reply_message = f"This chat is for English language communication. You texted me in {detected_lang}. Please rephrase your question in English."
             await update.message.reply_text(reply_message)
-            return # Прекращаем дальнейшую обработку
-
+            return
     except Exception as e:
-        logger.error(f"Ошибка во время валидации языка для user {user_id}: {e}", exc_info=True)
-        await update.message.reply_text(
-            "Sorry, I encountered an issue while processing the language of your message. "
-            "Please try again, or contact support if the problem persists."
-        )
+        logger.error(f"Language validation error for user {user_id}: {e}", exc_info=True)
+        await update.message.reply_text("Sorry, I had trouble processing the language of your message.")
         return
 
-    # 2. Если язык английский, передаем сообщение в RouterAgent
-    logger.info(f"Сообщение от {user_id} прошло валидацию языка. Вызов RouterAgent...")
+    logger.info(f"Message from {user_id} passed language validation. Calling RouterAgent...")
 
+    # Проверяем, что RouterAgent и RulesManager инициализированы
     if not router_agent_instance or not rules_manager:
         logger.error(f"RouterAgent или RulesManager не инициализирован. Отправка сообщения об ошибке пользователю {user_id}.")
         await update.message.reply_text(
@@ -95,15 +118,11 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    # 2. Запуск RouterAgent
     try:
-        # Запуск RouterAgent
-        # Входные данные для RouterAgent - это просто текст сообщения пользователя.
-        # Runner.run ожидает именованный аргумент 'input' или просто позиционный аргумент.
-        # router_agent_instance.run(text) - если бы мы вызывали метод напрямую, но мы используем Runner
         run_result = await Runner.run(router_agent_instance, text) 
         
         # RouterAgent должен вернуть JSON строку, которую мы парсим в RouterDecision
-        # (Это поведение из текущей реализации RouterAgent)
         raw_decision_str = run_result.final_output
         logger.info(f"RouterAgent raw output for user {user_id}: {raw_decision_str}")
 
@@ -121,7 +140,21 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         parsed_json_str = parsed_json_str.strip()
 
         router_decision = RouterDecision.model_validate_json(parsed_json_str)
-        logger.info(f"RouterAgent decision for user {user_id}: {router_decision}")
+        # Старый лог решения, можно будет удалить или изменить после рефакторинга
+        # logger.info(f"RouterAgent decision for user {user_id}: {router_decision}")
+
+        # --- Новое расширенное логирование решения RouterAgent ---
+        # В соответствии с FR-LOG-2 из TR-E3.6.md
+        log_data = {
+            "uid": user_id,
+            "message_id": update.message.message_id,
+            "q": text, # Полный текст сообщения
+            "action": router_decision.action,
+            "matched_rule_id": router_decision.matched_rule_id,
+            "params": router_decision.params.model_dump_json(exclude_none=True)
+        }
+        logger.info(f"RouterAgent decision details: {json.dumps(log_data, ensure_ascii=False, indent=2)}")
+        # --- Конец нового расширенного логирования ---
 
         # 3. Обработка решения RouterAgent
         action = router_decision.action
@@ -134,7 +167,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         elif action == "forward":
-            destination_chat_id = params.get("destination_chat_id")
+            destination_chat_id = params.destination_chat_id
             if not destination_chat_id:
                 logger.error(f"Действие 'forward' для user {user_id}, но 'destination_chat_id' отсутствует в параметрах. Matched rule: {matched_rule_id}")
                 await update.message.reply_text("Sorry, I was asked to forward your message, but the destination is unclear.")
@@ -151,8 +184,6 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 target_chat_id=destination_chat_id
             )
             if success:
-                # Можно добавить ответ пользователю, что его сообщение переслано, если это требуется
-                # await update.message.reply_text("Your message has been forwarded.") 
                 logger.info(f"Сообщение {original_message_id} успешно переслано в {destination_chat_id} для user {user_id}.")
             else:
                 logger.warning(f"Не удалось переслать сообщение {original_message_id} в {destination_chat_id} для user {user_id}.")
@@ -160,8 +191,8 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         elif action == "reply" or action == "default_reply":
-            response_text = params.get("response_text")
-            system_prompt_key = params.get("system_prompt_key")
+            response_text = params.response_text
+            system_prompt_key = params.system_prompt_key
 
             if response_text:
                 logger.info(f"Действие 'reply' (прямой ответ) для user {user_id}. Matched rule: {matched_rule_id}. Ответ: '{response_text[:100]}...'" )
@@ -169,23 +200,10 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 return
             
             elif system_prompt_key:
-                # Подготовка к Handoff для AnswerAgent (Эпик 5)
-                # Пока просто логируем и сообщаем пользователю, что запрос обрабатывается
-                # В будущем здесь будет реальный handoff
-                history = [] # Заглушка для истории, нужно будет реализовать сбор истории
-                handoff_data = ReplyHandoffData(
-                    user_message=text,
-                    history=history, # TODO: Заполнить реальной историей диалога
-                    system_prompt_key=system_prompt_key
+                # --- Запуск RAG и AnswerAgent пайплайна ---
+                await handle_answer_agent_handoff(
+                    update, text, user_id, memory_manager, matched_rule_id, params
                 )
-                logger.info(f"Действие 'reply' (через AnswerAgent) для user {user_id}. Matched rule: {matched_rule_id}. Handoff data prepared: {handoff_data}")
-                await update.message.reply_text(
-                    "Your request requires a detailed answer. I am processing it... (AnswerAgent handoff placeholder)"
-                )
-                # ЗАГЛУШКА: Здесь будет вызов handoff(agent=answer_agent, input_data=handoff_data)
-                # Например:
-                # answer_agent_placeholder = ... # Экземпляр AnswerAgent
-                # await context.handoff(answer_agent_placeholder, handoff_data)
                 return
             
             else:
@@ -205,6 +223,77 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Общая ошибка при обработке решения RouterAgent для user {user_id}: {e}", exc_info=True)
         await update.message.reply_text("Sorry, an unexpected error occurred while processing your message.")
         return
+
+async def handle_answer_agent_handoff(update: Update, text: str, user_id: int, memory_manager, matched_rule_id: str, params: RouterDecisionParams) -> None:
+    """Handles the pipeline for getting a response from the AnswerAgent."""
+    
+    # 1. Получение контекста из RetrieverAgent
+    retrieved_context = None
+    if retriever_agent:
+        try:
+            retrieved_context = await retriever_agent.retrieve_context(text)
+            logger.info(f"RetrieverAgent returned context for user {user_id}.")
+        except Exception as e:
+            logger.error(f"Error calling RetrieverAgent for user {user_id}: {e}", exc_info=True)
+    
+    # 2. Получение истории диалога и инструкций
+    history = memory_manager.get_history_as_text(user_id) if memory_manager else ""
+    
+    # 3. Сборка инструкций: основные + поведенческие
+    final_instructions = []
+    matched_rule = rules_manager.get_rule_by_id(matched_rule_id) if matched_rule_id else None
+    
+    # Основная инструкция из правила (если есть)
+    if matched_rule and hasattr(matched_rule, 'instruction') and matched_rule.instruction:
+        final_instructions.append(matched_rule.instruction)
+        
+    # Поведенческие инструкции
+    if params.behavioral_prompts:
+        final_instructions.extend(params.behavioral_prompts)
+        
+    instruction_text = "\n".join(f"- {inst}" for inst in final_instructions) if final_instructions else ""
+
+    # 4. Создание объекта с данными для AnswerAgent
+    handoff_data = ReplyHandoffData(
+        user_message=text,
+        system_prompt_key=params.system_prompt_key,
+        context=retrieved_context,
+        history=history,
+        instruction=instruction_text,
+        behavioral_prompts=params.behavioral_prompts # на всякий случай, если понадобится в будущем
+    )
+
+    await update.message.reply_chat_action('typing')
+
+    # 5. Запуск AnswerAgent
+    try:
+        answer_result = await Runner.run(answer_agent, text, context=handoff_data)
+        final_response = str(answer_result.final_output)
+        logger.info(f"AnswerAgent returned response for user {user_id}: '{final_response[:150]}...'")
+
+        if memory_manager:
+            memory_manager.add_message(user_id, "assistant", final_response)
+        
+        # Логирование взаимодействия
+        log_entry = InteractionLog(
+            timestamp=datetime.utcnow(),
+            user_id=user_id,
+            matched_rule_id=matched_rule_id,
+            action="reply_with_answer_agent",
+            question=text,
+            answer=final_response,
+            context=retrieved_context
+        )
+        await logger_agent.log_interaction(log_entry)
+        
+        await update.message.reply_text(final_response)
+
+    except Exception as e:
+        error_message = "Sorry, I encountered an error while generating a detailed response."
+        if memory_manager:
+            memory_manager.add_message(user_id, "assistant", error_message)
+        logger.error(f"Error executing AnswerAgent for user {user_id}: {e}", exc_info=True)
+        await update.message.reply_text(error_message)
 
 async def reload_rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /reload_rules для перезагрузки правил из rules.yaml."""
@@ -233,35 +322,16 @@ async def reload_rules_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     logger.info(f"Администратор {user_id} инициировал перезагрузку правил.")
-    try:
-        # Метод reload_rules() в RulesManager теперь возвращает bool и не кидает исключения наружу,
-        # а обрабатывает их внутри и логирует.
-        success = rules_manager.reload_rules()
-        
-        if success:
-            logger.info(f"Правила успешно перезагружены администратором {user_id}. Количество правил: {len(rules_manager.get_rules())}")
-            await update.message.reply_text(
-                f"Правила успешно перезагружены. Загружено правил: {len(rules_manager.get_rules())}."
-            )
-        else:
-            # RulesManager уже залогировал детали ошибки
-            logger.warning(f"Администратор {user_id} столкнулся с ошибкой при перезагрузке правил. Предыдущие правила восстановлены.")
-            await update.message.reply_text(
-                "Ошибка при перезагрузке правил. Детали ошибки залогированы. Были восстановлены предыдущие правила."
-            )
-            
-    except Exception as e: # Дополнительный общий перехват на всякий случай
-        logger.error(f"Непредвиденная ошибка при выполнении /reload_rules для {user_id}: {e}", exc_info=True)
+    success = rules_manager.reload_rules()
+    
+    if success:
+        num_rules = len(rules_manager.get_rules())
+        logger.info(f"Правила успешно перезагружены администратором {user_id}. Всего правил: {num_rules}")
         await update.message.reply_text(
-            "Произошла непредвиденная ошибка при попытке перезагрузить правила. Пожалуйста, проверьте логи."
+            f"Правила успешно перезагружены. Теперь управляется {num_rules} правилами."
         )
-
-# Старый echo обработчик будет заменен на handle_text_message
-# async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-#     """Обработчик для всех текстовых сообщений (echo)."""
-#     user_id = update.effective_user.id
-#     text = update.message.text
-#     logger.info(f"Получено сообщение от {user_id}: {text}")
-#     await update.message.reply_text(f"Echo: {text}")
-
-# Добавить другие обработчики по мере необходимости 
+    else:
+        logger.warning(f"Администратор {user_id} столкнулся с ошибкой при перезагрузке правил. Предыдущие правила восстановлены.")
+        await update.message.reply_text(
+            "Ошибка при перезагрузке правил. Детали ошибки залогированы. Были восстановлены предыдущие правила."
+        )

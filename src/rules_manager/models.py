@@ -1,9 +1,12 @@
+# src/rules_manager/models.py
+# This file contains the models for the rules.
+
 from typing import List, Literal, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, validator, root_validator, model_validator, ValidationError
 
 # Enums
 ActionType = Literal["reply", "forward", "drop"]
-ConditionType = Literal["keyword_match", "regex_match"]
+ConditionType = Literal["keyword_match", "regex_match", "description_match"]
 KeywordMatchType = Literal["any", "all"]
 
 # --- Condition Models ---
@@ -20,8 +23,12 @@ class RegexMatchCondition(BaseCondition):
     type: Literal["regex_match"] = "regex_match"
     pattern: str
 
+class DescriptionMatchCondition(BaseCondition):
+    type: Literal["description_match"] = "description_match"
+    description: str = Field(..., min_length=1)
+
 # Union of all condition types using discriminated union
-AnyCondition = Union[KeywordMatchCondition, RegexMatchCondition]
+AnyCondition = Union[KeywordMatchCondition, RegexMatchCondition, DescriptionMatchCondition]
 
 # --- Action Parameter Models ---
 class BaseActionParams(BaseModel):
@@ -30,11 +37,15 @@ class BaseActionParams(BaseModel):
 class ReplyActionParams(BaseActionParams):
     response_text: Optional[str] = None
     system_prompt_key: Optional[str] = None
+    behavioral_prompts: Optional[List[str]] = None
 
     @model_validator(mode='after')
     def check_reply_params(self) -> 'ReplyActionParams':
-        if not self.response_text and not self.system_prompt_key:
-            raise ValueError('Either response_text or system_prompt_key must be provided for reply action')
+        # For a 'reply' action, at least one of the possible parameters must be provided.
+        if not self.response_text and not self.system_prompt_key and not self.behavioral_prompts:
+            raise ValueError(
+                'For a reply action, at least one of response_text, system_prompt_key, or behavioral_prompts must be provided.'
+            )
         return self
 
 class ForwardActionParams(BaseActionParams):
@@ -51,6 +62,7 @@ class Rule(BaseModel):
     conditions: List[AnyCondition] = Field(..., min_length=1)
     action: ActionType
     action_params: Union[ReplyActionParams, ForwardActionParams, DropActionParams]
+    continue_on_match: bool = False
 
     @model_validator(mode='before')
     @classmethod

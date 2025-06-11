@@ -18,6 +18,8 @@ pyyaml = ">=6.0.2,<7.0.0"
 python-dotenv = ">=1.1.0,<2.0.0"
 faiss-cpu = ">=1.11.0,<2.0.0"
 openai-agents = ">=0.0.16,<0.0.17"
+langchain-community = "^0.3.24"
+langchain-openai = "^0.3.21"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
