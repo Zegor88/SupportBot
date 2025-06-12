@@ -1,11 +1,31 @@
 # src/rules.yaml
 # This file contains the rules for the bot.
 
+#type of conditions:
+# - keyword_match - match any of the keywords
+# - regex_match - match any of the regex patterns
+# - description_match - match the description of the rule
+
+# match_type (for keyword_match and regex_match):
+# - all
+# - any
+# - exact
+# - contains
+# - starts_with
+# - ends_with
+
+#type of action:
+# - reply - reply to the user
+# - forward - forward the user to the destination chat
+# - drop - drop the user from the conversation
+# - default_reply - reply with the default prompt
+
+
 rules:
   # --- Behavioral Rules (these add context and allow processing to continue) ---
-  - rule_id: "BEHAVIOR_GREETING"
+  - rule_id: "GREETING"
     priority: 1
-    continue_on_match: true # This makes the rule non-terminal
+    is_behavioral: true # This makes the rule non-terminal
     conditions:
       - type: "description_match"
         description: "The user's message contains a greeting (e.g., 'hi', 'hello', 'good morning')."
@@ -17,6 +37,7 @@ rules:
   # --- Terminal Rules (these stop processing and define the final action) ---
   - rule_id: "FAREWELL"
     priority: 10
+    is_behavioral: false
     conditions:
       - type: "description_match"
         description: "The user says goodbye to the bot, says thanks and ends the conversation, etc."
@@ -26,31 +47,50 @@ rules:
 
   - rule_id: "HAMSTER_COMBAT_SUPPORT_REDIRECT"
     priority: 20
+    is_behavioral: false
     conditions: 
       - type: "keyword_match"
         keywords: ["hamster combat", "hmstr", "hamster kombat"]
         match_type: "any"
         case_sensitive: false
+      - type: "description_match"
+        description: "The user is asking about the support for Hamster Combat."
     action: "reply"
     action_params:
       response_text: "This chat doesn't provide support for Hamster Boost. Please contact @Hamster_Boost_Support_bot for assistance with your query."
 
   - rule_id: "hamster_withdraw"
     priority: 21
+    is_behavioral: false
     conditions:
       - type: "keyword_match"
         keywords: ["hamster combat", "hmstr", "hamster kombat"]
         match_type: "any"
         case_sensitive: false
       - type: "description_match"
-        description: "The user is asking how to withdraw funds, get a reward, or use a boost."
+        description: "The user is asking how to withdraw hamster related funds (hamster combat, hamster boost, hamster token, etc.), get a reward, or use a boost."
     action: "reply"
     action_params:
       response_text: "Hello! If you have received a reward in Hamster Boost, follow these instructions: https://t.me/broxus_chat/26814"
-      
+
+  - rule_id: "Ever_Wallet_Support"
+    priority: 5
+    is_behavioral: false
+    conditions:
+      - type: "keyword_match"
+        keywords: ["Ever Wallet"]
+        match_type: "any"
+        case_sensitive: false
+      - type: "description_match"
+        description: "The user is asking about the support for Ever Wallet (download, install, transactions, etc.)"
+    action: "reply"
+    action_params:
+      system_prompt_key: "default_prompt" 
+
   # --- Test Rules ---
   - rule_id: "test_drop_action"
     priority: 200
+    is_behavioral: false
     conditions:
       - type: "keyword_match"
         keywords: ["test drop please"]
@@ -60,6 +100,7 @@ rules:
 
   - rule_id: "test_forward_action"
     priority: 201
+    is_behavioral: false
     conditions:
       - type: "keyword_match"
         keywords: ["test forward please"]
@@ -70,6 +111,7 @@ rules:
 
   - rule_id: "test_direct_reply_action"
     priority: 202
+    is_behavioral: false
     conditions:
       - type: "keyword_match"
         keywords: ["test direct reply please"]
@@ -80,6 +122,7 @@ rules:
 
   - rule_id: "test_handoff_reply_action"
     priority: 203
+    is_behavioral: false
     conditions:
       - type: "keyword_match"
         keywords: ["test handoff reply please"]

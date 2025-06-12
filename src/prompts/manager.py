@@ -3,7 +3,6 @@ import os
 from typing import Dict
 import logging
 
-# Получаем тот же логгер, что и в основном приложении, для консистентности
 logger = logging.getLogger("src.bot.config")
 
 class PromptManager:

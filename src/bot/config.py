@@ -18,16 +18,17 @@ logging.basicConfig(
         logging.StreamHandler() # Вывод в консоль
     ]
 )
-
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
-
 logger = logging.getLogger(__name__)
 
+# Класс для хранения конфигурации бота
 class Config:
     """Класс для хранения конфигурации бота."""
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-    ADMIN_USER_IDS_RAW = os.getenv('ADMIN_USER_IDS', '') # Пример: "12345,67890"
+    
+    # Настройки администраторов
+    ADMIN_USER_IDS_RAW = os.getenv('ADMIN_USER_IDS', '')
     ADMIN_USER_IDS = []
     if ADMIN_USER_IDS_RAW:
         try:
@@ -38,6 +39,11 @@ class Config:
             ADMIN_USER_IDS = []
     else:
         logger.warning("Переменная окружения ADMIN_USER_IDS не установлена или пуста. Команды администрирования будут недоступны.")
+
+    # Настройки ответа сообщения, если нет совпадений с правилами
+    REPLY_ON_NO_MATCH_RAW = os.getenv('REPLY_ON_NO_MATCH', 'false').lower()
+    REPLY_ON_NO_MATCH = REPLY_ON_NO_MATCH_RAW in ('true', '1', 't')
+    logger.info(f"REPLY_ON_NO_MATCH установлен в: {REPLY_ON_NO_MATCH}")
 
     @staticmethod
     def validate_token():

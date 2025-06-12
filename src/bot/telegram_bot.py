@@ -1,12 +1,11 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-import logging
-
 from .config import Config, logger
 from .handlers import start, help_command, handle_text_message, reload_rules_command
 from ..utils.memory_manager import MemoryManager  # Добавляем импорт MemoryManager
 
 class TelegramBot:
     def __init__(self, token: str):
+        """Инициализирует бота."""
         if not token:
             logger.critical("Токен Telegram бота не предоставлен!")
             raise ValueError("Токен не может быть пустым")

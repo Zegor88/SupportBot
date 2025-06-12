@@ -92,3 +92,5 @@ CSV_SETTINGS = {
         "Question"
     ],
 }
+
+NUM_STORED_MESSAGES = 10

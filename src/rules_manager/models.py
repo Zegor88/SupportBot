@@ -3,6 +3,7 @@
 
 from typing import List, Literal, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, validator, root_validator, model_validator, ValidationError
+from pydantic import ConfigDict
 
 # Enums
 ActionType = Literal["reply", "forward", "drop"]
@@ -57,12 +58,21 @@ class DropActionParams(BaseActionParams):
 
 # --- Rule Model ---
 class Rule(BaseModel):
-    rule_id: str
+    """
+    Represents a single rule in the rules.yaml file.
+    """
+    rule_id: str = Field(..., min_length=1)
     priority: int
+    is_behavioral: bool = Field(default=False, alias='is_behavioral')
     conditions: List[AnyCondition] = Field(..., min_length=1)
     action: ActionType
     action_params: Union[ReplyActionParams, ForwardActionParams, DropActionParams]
-    continue_on_match: bool = False
+    instruction: Optional[str] = None # For system prompts
+
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
 
     @model_validator(mode='before')
     @classmethod
@@ -108,4 +118,9 @@ class Rule(BaseModel):
 
 # --- Config Model (for the entire rules.yaml file) ---
 class RulesConfig(BaseModel):
-    rules: List[Rule] 
+    rules: List[Rule]
+
+class RulesFile(BaseModel):
+    # This class is not provided in the original file or the code block
+    # It's assumed to exist as it's called in the original file
+    pass 

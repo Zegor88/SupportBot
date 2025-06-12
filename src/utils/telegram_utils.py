@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class ForwardTool:
+class MessageForwarder:
     def __init__(self, bot: Bot):
         self.bot = bot
 
@@ -50,26 +50,4 @@ class ForwardTool:
             return False
         except Exception as e:
             logger.error(f"An unexpected error occurred while forwarding message_id {original_message_id} to {target_chat_id}: {type(e).__name__} - {e}")
-            return False
-
-# Пример использования (для тестирования, не для основного кода):
-# async def main():
-#     # Замените на ваш токен и ID чатов
-#     bot_token = "YOUR_BOT_TOKEN" 
-#     test_bot = Bot(token=bot_token)
-#     tool = ForwardTool(bot=test_bot)
-    
-#     # Пример: пересылка сообщения с ID 123 из чата -1001234567890 в чат @my_test_channel
-#     # или в чат с числовым ID 987654321
-#     # Убедитесь, что бот имеет права на чтение в from_chat_id и на отправку в target_chat_id
-    
-#     # success = await tool.forward_message(
-#     #     original_message_id=123, # Замените на реальный ID сообщения
-#     #     from_chat_id=-1001234567890, # Замените на реальный ID исходного чата
-#     #     target_chat_id="@my_test_channel" # или числовой ID
-#     # )
-#     # print(f"Forwarding successful: {success}")
-
-# if __name__ == '__main__':
-#     import asyncio
-#     # asyncio.run(main()) 
+            return False 

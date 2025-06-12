@@ -13,9 +13,6 @@ from .answer_agent import answer_agent
 # Logger Agent
 from src.utils.logger import Logger
 
-# Retriever Agent
-from .retriever_agent import RetrieverAgent
-
 # Data Models
 from .models import RouterDecision, ReplyHandoffData, InteractionLog, RouterDecisionParams
 
@@ -23,7 +20,6 @@ from .models import RouterDecision, ReplyHandoffData, InteractionLog, RouterDeci
 __all__ = [
     "LanguageValidatorAgentWrapper",
     "RouterAgent",
-    "RetrieverAgent",
     "answer_agent",
     "Logger",
     "RouterDecision",

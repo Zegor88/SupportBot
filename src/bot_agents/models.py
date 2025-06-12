@@ -16,6 +16,7 @@ class RouterDecisionParams(BaseModel):
 class RouterDecision(BaseModel):
     action: RouterActionType
     matched_rule_id: Optional[str] # ID терминального правила, которое было выбрано
+    behavioral_rule_ids: Optional[List[str]] = None # IDs сработавших поведенческих правил
     params: RouterDecisionParams
 
 # Модель для данных, передаваемых в AnswerAgent
@@ -25,7 +26,6 @@ class ReplyHandoffData(BaseModel):
     """
     user_message: str
     system_prompt_key: str
-    context: Optional[str] = None
     history: Optional[str] = None
     instruction: Optional[str] = None
     behavioral_prompts: Optional[List[str]] = None
@@ -41,4 +41,4 @@ class InteractionLog(BaseModel):
     action: str
     question: str
     answer: str
-    context: Optional[str] 
+    final_prompt: str

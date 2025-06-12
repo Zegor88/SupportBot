@@ -1,4 +1,4 @@
-from agents import Agent, Runner
+from agents import Agent
 from agents.run_context import RunContextWrapper
 from .models import RouterDecision, RouterActionType # Наши модели для RouterAgent
 import os
@@ -34,6 +34,13 @@ def dynamic_router_instructions(
 ) -> str:
     rules_manager: RulesManager = agent.rules_manager 
     rules = rules_manager.get_rules() # Получаем список объектов RulesManagerRule
+
+    # Извлекаем историю из контекста
+    history = "No history available."
+    if context_wrapper.context and isinstance(context_wrapper.context, dict):
+        history = context_wrapper.context.get("history", "No history available.")
+    if not history:
+        history = "No history available."
     
     rules_for_prompt_str = "No rules available."
     if rules:
@@ -43,57 +50,87 @@ def dynamic_router_instructions(
 
     prompt = f"""
 You are a sophisticated Router Agent. Your task is to process a user's message against a set of rules and produce a final action plan as a JSON object. 
-Some rules are 'terminal' (they stop the process), while others are 'behavioral' (they add instructions but allow processing to continue).
-
 You MUST return your decision STRICTLY as a JSON string matching the `RouterDecision` schema.
 Do NOT add any explanatory text before or after the JSON string.
+
+Here is the conversation history with the user. Use it for context to better understand the user's intent.
+<history>
+{history}
+</history>
 
 Here are the rules, sorted by priority:
 {rules_for_prompt_str}
 
-Each rule has a `continue_on_match` flag (it defaults to `false` if not present).
-- If `continue_on_match: true`, the rule is behavioral.
-- If `continue_on_match: false`, the rule is terminal.
+IMPORTANT: There are two types of rules in the system:
+1. Behavioral Rules (`is_behavioral: true`): These rules add context and instructions but don't stop processing.
+2. Terminal Rules (`is_behavioral: false`): These rules determine the final action and stop processing.
 
-Your task:
-1.  Initialize an empty list for `behavioral_prompts`.
-2.  Iterate through the rules from top to bottom (by priority).
-3.  For each rule that semantically matches the user's message:
-    a.  If the rule's `action_params` contain `behavioral_prompts`, add all of them to your collected list.
-    b.  If the rule is terminal (`continue_on_match: false`), then this is your final action. Stop iterating. Use this rule's `action`, `rule_id`, and `action_params` for your final output.
-4.  **Construct the final JSON output.**
-5.  The output must be a single `RouterDecision` JSON.
-6.  The `action` and `matched_rule_id` should come from the **first terminal rule** that matched.
-7.  The `params` object in your output should contain the `params` of that terminal rule, but **you must also add the `behavioral_prompts` key** containing all the prompts you collected from ALL matched rules (both behavioral and terminal).
-8.  If no terminal rule matches, you must use the default action: `action: "default_reply"`, `matched_rule_id: null`, and `params: {{ "system_prompt_key": "general_fallback_prompt" }}`. Even in this case, you must include any `behavioral_prompts` you collected from matched behavioral rules.
+Your task is to:
+1. Collect all matching behavioral rules (their IDs and prompts)
+2. Find the first matching terminal rule (if any)
+3. Generate a response that includes:
+   - The action from the terminal rule (or default if none found)
+   - The ID of the terminal rule (or null if none found)
+   - The IDs of all matching behavioral rules
+   - All collected behavioral prompts
 
-Example of a final JSON for a message that matches a behavioral greeting rule and a terminal question rule:
-```json
-{{
-  "action": "reply",
-  "matched_rule_id": "some_question_rule",
-  "params": {{
-    "system_prompt_key": "faq_for_that_question",
-    "behavioral_prompts": [
-      "The user started with a greeting. Greet them back warmly before answering their question."
-    ]
-  }}
-}}
-```
+Process:
+
+1.  **Initialization**:
+    *   Start with `final_decision` as `null`.
+    *   Start with an empty list called `collected_behavioral_prompts`.
+    *   Start with an empty list called `collected_behavioral_rule_ids`.
+
+2.  **Rule Iteration**:
+    *   Go through the rules one by one, in the provided order (by priority).
+    *   For each rule that semantically matches the user's latest message (considering the history):
+        a.  **Check for Behavioral Rule**: If `is_behavioral: true`:
+            *   Add the rule's `rule_id` to `collected_behavioral_rule_ids`.
+            *   If the rule has `behavioral_prompts`, add them to `collected_behavioral_prompts`.
+            *   **Continue** to the next rule.
+        b.  **Check for Terminal Rule**: If `is_behavioral: false`:
+            *   If your `final_decision` is still `null`, this rule becomes your `final_decision`. Store its `action`, `rule_id`, and `action_params`.
+            *   If the rule has `behavioral_prompts`, add them to `collected_behavioral_prompts`.
+            *   **You must stop iterating now.**
+
+3.  **Final Decision Assembly**:
+    *   **If you found a terminal rule** (your `final_decision` is not `null`):
+        *   Your final JSON will use the `action` and `matched_rule_id` from your `final_decision`.
+        *   The `params` object will be from the `final_decision`.
+    *   **If you did NOT find any terminal rule** (`final_decision` is still `null`):
+        *   You must use the default action. Your JSON will have `action: "default_reply"`, `matched_rule_id: null`, and `params`: {{{{ "system_prompt_key": "default_prompt" }}}}.
+    *   **In all cases**:
+        *   The final `params` object in the JSON must include a `behavioral_prompts` key with all `collected_behavioral_prompts`.
+        *   The top-level JSON must include a `behavioral_rule_ids` key with all `collected_behavioral_rule_ids`.
 
 Example of a final JSON if ONLY a behavioral rule matches:
 ```json
 {{
   "action": "default_reply",
   "matched_rule_id": null,
+  "behavioral_rule_ids": ["GREETING"],
   "params": {{
-    "system_prompt_key": "general_fallback_prompt",
+    "system_prompt_key": "default_prompt",
     "behavioral_prompts": [
       "The user started with a greeting. Greet them back warmly before answering their question."
     ]
   }}
 }}
 ```
+
+Example of a final JSON if both behavioral and terminal rules match:
+```json
+{{
+  "action": "reply",
+  "matched_rule_id": "FAREWELL",
+  "behavioral_rule_ids": ["GREETING"],
+  "params": {{
+    "response_text": "Goodbye! Have a great day!",
+    "behavioral_prompts": [
+      "The user started with a greeting. Greet them back warmly before saying goodbye."
+    ]
+  }}
+}}
 """
     return prompt
 

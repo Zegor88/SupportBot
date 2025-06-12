@@ -19,26 +19,23 @@ async def build_answer_prompt(context_wrapper: RunContextWrapper[Any], agent: Ag
     handoff_data: ReplyHandoffData = context_wrapper.context
 
     # 2. Получаем системный промпт из PromptManager
-    system_prompt = prompt_manager.get_prompt(handoff_data.system_prompt_key)
+    system_prompt_key = handoff_data.system_prompt_key or "default_prompt"
+    system_prompt = prompt_manager.get_prompt(system_prompt_key)
 
-    # 3. Добавляем заглушки для будущих данных (Эпик E5)
-    # TODO: [E5] Заменить эту заглушку на реальное получение и форматирование истории диалога.
-    history_str = "Conversation history is not yet implemented."
+    # 3. Получаем остальные данные из handoff_data
+    history_str = handoff_data.history or "No conversation history provided."
     
-    # TODO: [E5] Заменить эту заглушку на реальный контекст, полученный от RetrieverAgent.
-    rag_context_str = handoff_data.context or "No additional context provided."
+    instruction_str = handoff_data.instruction
+    if not instruction_str:
+        instruction_str = "No special instructions provided. Follow the standard procedure."
 
-    # 4. Собираем итоговый промпт
-    final_prompt = f"""{system_prompt}
+    # 4. Собираем итоговый промпт, подставляя переменные
+    # Используем .format() для замены плейсхолдеров типа {history}, {instruction}
+    # Плейсхолдер {context} больше не используется, т.к. агент сам получает его через Tool.
+    final_prompt = system_prompt.format(
+        history=history_str,
+        instruction=instruction_str
+    )
 
-### Conversation History:
-{history_str}
-
-### Provided Context from Knowledge Base:
-{rag_context_str}
-
-### User's Question:
-{handoff_data.user_message}
-"""
     logger.debug(f"Assembled prompt for AnswerAgent with key '{handoff_data.system_prompt_key}'.")
     return final_prompt 

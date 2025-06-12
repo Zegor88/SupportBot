@@ -145,8 +145,6 @@ class DocumentRetriever:
                 for doc in documents
             ])
             
-            # TODO: Добавить обрезку контекста по токенам
-            
             return context
             
         except Exception as e:

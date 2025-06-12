@@ -1,10 +1,11 @@
 from typing import Dict, List, Optional
 from datetime import datetime
+from .config import NUM_STORED_MESSAGES
 
 class MemoryManager:
     def __init__(self):
         self._memory: Dict[int, List[dict]] = {}
-        self.max_history_length = 10  # Хранить последние 10 сообщений для каждого пользователя
+        self.max_history_length = NUM_STORED_MESSAGES  # Хранить последние 10 сообщений для каждого пользователя
 
     def add_message(self, user_id: int, role: str, text: str) -> None:
         """Добавляет новое сообщение в историю диалога."""
