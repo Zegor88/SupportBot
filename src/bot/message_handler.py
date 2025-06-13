@@ -25,14 +25,17 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     # 1. Валидация языка
     try:
         validation_result = await bot_services.language_validator.validate_language(text)
+        logger.info(f"Language validation result for user {user_id}: is_english={validation_result.is_english}, detected_language={validation_result.detected_language}")
         if not validation_result.is_english:
             detected_lang = validation_result.detected_language or "an unknown language"
             reply_message = f"This chat is for English language communication. You texted me in {detected_lang}. Please rephrase your question in English."
-            await update.message.reply_text(reply_message)
+            await update.message.reply_text(
+                reply_message, 
+                reply_to_message_id=message_id)
             return
     except Exception as e:
         logger.error(f"Language validation error for user {user_id}: {e}", exc_info=True)
-        await update.message.reply_text("Sorry, I had trouble processing the language of your message.")
+        await update.message.reply_text("Sorry, I had trouble processing the language of your message.", reply_to_message_id=message_id)
         return
 
     logger.info(f"Message from {user_id} passed language validation. Calling RouterAgent...")
