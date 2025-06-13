@@ -42,3 +42,4 @@ class InteractionLog(BaseModel):
     question: str
     answer: str
     final_prompt: str
+    rag_contexts: Optional[List[str]] = None

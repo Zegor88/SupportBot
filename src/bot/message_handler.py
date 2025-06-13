@@ -197,8 +197,18 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
         logger.info(f"Final prompt for AnswerAgent (user: {user_id}):\n--- PROMPT START ---\n{final_prompt_for_agent}\n--- PROMPT END ---")
         
         answer_result = await bot_services.runner.run(answer_agent, text, context=handoff_data)
+        
         final_response = str(answer_result.final_output)
         
+        # Собираем все результаты вызова RAG tool
+        rag_contexts = []
+        if hasattr(answer_result, 'new_items') and answer_result.new_items:
+            for item in answer_result.new_items:
+                # Ищем результаты вызовов инструментов (ToolCallOutputItem)
+                if hasattr(item, 'type') and item.type == 'tool_call_output_item':
+                    if hasattr(item, 'output'):
+                        rag_contexts.append(str(item.output))
+
         if memory_manager:
             memory_manager.add_message(user_id, "assistant", final_response)
 
@@ -209,7 +219,8 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
             action="reply_with_answer_agent",
             question=text,
             answer=final_response,
-            final_prompt=final_prompt_for_agent
+            final_prompt=final_prompt_for_agent,
+            rag_contexts=rag_contexts if rag_contexts else None
         )
         await bot_services.logger_agent.log_interaction(log_entry)
         

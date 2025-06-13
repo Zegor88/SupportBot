@@ -42,17 +42,26 @@ async def reload_rules_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not Config.ADMIN_USER_IDS:
         logger.warning(f"Попытка вызова /reload_rules пользователем {user_id}, но список ADMIN_USER_IDS пуст.")
-        await update.message.reply_text("Команда не настроена: список администраторов не определен.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Команда не настроена: список администраторов не определен."
+        )
         return
 
     if user_id not in Config.ADMIN_USER_IDS:
         logger.warning(f"Неавторизованный пользователь {user_id} попытался выполнить /reload_rules.")
-        await update.message.reply_text("У вас нет прав для выполнения этой команды.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="У вас нет прав для выполнения этой команды."
+        )
         return
 
     if not bot_services.rules_manager:
         logger.error(f"RulesManager не инициализирован. Пользователь {user_id} не может перезагрузить правила.")
-        await update.message.reply_text("Ошибка: Сервис управления правилами недоступен.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ошибка: Сервис управления правилами недоступен."
+        )
         return
     
     logger.info(f"Администратор {user_id} инициировал перезагрузку правил.")
@@ -61,9 +70,15 @@ async def reload_rules_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if success:
         num_rules = len(bot_services.rules_manager.get_rules())
         logger.info(f"Правила успешно перезагружены администратором {user_id}. Всего правил: {num_rules}")
-        await update.message.reply_text(f"Правила успешно перезагружены. Теперь управляется {num_rules} правилами.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Правила успешно перезагружены. Теперь управляется {num_rules} правилами."
+        )
     else:
         logger.warning(f"Администратор {user_id} столкнулся с ошибкой при перезагрузке правил.")
-        await update.message.reply_text("Ошибка при перезагрузке правил. Детали ошибки залогированы.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ошибка при перезагрузке правил. Детали ошибки залогированы."
+        )
 
 __all__ = ["start", "help_command", "reload_rules_command", "handle_text_message"]

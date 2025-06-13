@@ -78,7 +78,7 @@ rules:
     is_behavioral: false
     conditions:
       - type: "keyword_match"
-        keywords: ["Ever Wallet"]
+        keywords: ["Ever Wallet", "wallet", "ever wallet"]
         match_type: "any"
         case_sensitive: false
       - type: "description_match"
