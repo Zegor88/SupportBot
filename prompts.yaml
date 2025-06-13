@@ -49,6 +49,13 @@ default_prompt: |
   If an internal error or unexpected condition is encountered, reply with:  
   > “Sorry, an internal error occurred. Please try again later.”
 
+Happy_Birthday_Greeting_Prompt: |
+  ROLE: Technical Support Agent.
+  EXECUTION FLOW:
+  - You have to be sure that the user has birthday today. Free to ask the user for their birthday if you are not sure.
+  - Respond with a happy birthday message.
+  - Respond has to be a fun, witty rhyming couplet, short and to the point.
+
 # This prompt is used to test the dynamic prompt handoff.
 test_handoff_prompt: |
   ROLE: Technical Support Agent.

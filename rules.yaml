@@ -87,6 +87,16 @@ rules:
     action_params:
       system_prompt_key: "default_prompt" 
 
+  - rule_id: "Happy_Birthday_Greeting"
+    priority: 1
+    is_behavioral: false
+    conditions:
+      - type: "description_match"
+        description: "The user has birthday today"
+    action: "reply"
+    action_params:
+      system_prompt_key: "Happy_Birthday_Greeting_Prompt" 
+
   # --- Test Rules ---
   - rule_id: "test_drop_action"
     priority: 200

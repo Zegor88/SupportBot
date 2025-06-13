@@ -15,6 +15,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработчик для всех текстовых сообщений, включает валидацию языка."""
     user_id = update.effective_user.id
     text = update.message.text
+    message_id = update.message.message_id
 
     logger.info(f"Received text message from {user_id}: '{text[:100]}...'")
 
@@ -109,11 +110,15 @@ async def execute_router_decision(update: Update, context: ContextTypes.DEFAULT_
         await handle_forward_action(update, context, params, user_id, matched_rule_id)
 
     elif action in ["reply", "default_reply"]:
-        await handle_reply_action(update, text, user_id, memory_manager, matched_rule_id, params)
+        await handle_reply_action(update, context, text, user_id, memory_manager, matched_rule_id, params)
 
     else:
         logger.warning(f"Unknown action '{action}' from RouterAgent for user {user_id}. Decision: {decision}")
-        await update.message.reply_text("Sorry, I received an unknown instruction from the routing system.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Sorry, I received an unknown instruction from the routing system.",
+            reply_to_message_id=update.message.message_id
+        )
 
 async def handle_forward_action(update: Update, context: ContextTypes.DEFAULT_TYPE, params: RouterDecisionParams, user_id: int, matched_rule_id: str | None) -> None:
     """Обрабатывает действие 'forward'."""
@@ -135,26 +140,32 @@ async def handle_forward_action(update: Update, context: ContextTypes.DEFAULT_TY
         logger.warning(f"Failed to forward message for user {user_id}. Matched rule: {matched_rule_id}")
         await update.message.reply_text("Sorry, I could not forward your message at this time.")
 
-async def handle_reply_action(update: Update, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
+async def handle_reply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
     """Обрабатывает действие 'reply' или 'default_reply'."""
     # Если есть response_text, то отправляем его пользователю
     if params.response_text:
         logger.info(f"Action 'reply' (direct response) for user {user_id}. Matched rule: {matched_rule_id}.")
-        await update.message.reply_text(params.response_text)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=params.response_text,
+            reply_to_message_id=update.message.message_id
+        )
         return
     
     # Если есть system_prompt_key, то отправляем его пользователю
     if params.system_prompt_key:
-        await handle_answer_agent_handoff(update, text, user_id, memory_manager, matched_rule_id, params)
+        await handle_answer_agent_handoff(update, context, text, user_id, memory_manager, matched_rule_id, params)
         return
     
     logger.error(f"Action 'reply' for user {user_id}, but no 'response_text' or 'system_prompt_key'. Matched rule: {matched_rule_id}.")
-    await update.message.reply_text("Sorry, I was asked to reply, but I don't have the required information.")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Sorry, I was asked to reply, but I don't have the required information.",
+        reply_to_message_id=update.message.message_id
+    )
 
-async def handle_answer_agent_handoff(update: Update, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
+async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
     """Handles the RAG and AnswerAgent pipeline."""
-    # Контекст больше не извлекается здесь. AnswerAgent будет делать это сам с помощью своего Tool.
-    
     history = memory_manager.get_history_as_text(user_id) if memory_manager else ""
     
     final_instructions = []
@@ -172,7 +183,7 @@ async def handle_answer_agent_handoff(update: Update, text: str, user_id: int, m
         behavioral_prompts=params.behavioral_prompts
     )
 
-    await update.message.reply_chat_action('typing')
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
 
     try:
         from src.prompts import build_answer_prompt
@@ -199,11 +210,19 @@ async def handle_answer_agent_handoff(update: Update, text: str, user_id: int, m
         )
         await bot_services.logger_agent.log_interaction(log_entry)
         
-        await update.message.reply_text(final_response)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=final_response,
+            reply_to_message_id=update.message.message_id
+        )
 
     except Exception as e:
         error_message = "Sorry, I encountered an error while generating a detailed response."
         if memory_manager:
             memory_manager.add_message(user_id, "assistant", error_message)
         logger.error(f"Error executing AnswerAgent for user {user_id}: {e}", exc_info=True)
-        await update.message.reply_text(error_message) 
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=error_message,
+            reply_to_message_id=update.message.message_id
+        ) 

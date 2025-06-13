@@ -1,29 +1,16 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
 # Virtual Environment
 venv/
-env/
-ENV/
 .env
 
 # IDE
@@ -45,4 +32,15 @@ htmlcov/
 
 # Project specific
 *.db
-*.sqlite3 
+*.sqlite3
+knowledge/
+*.json
+!rules.json
+!prompts.json
+docs/
+data/
+
+# Python package management
+pyproject.toml
+poetry.lock
+Makefile 
