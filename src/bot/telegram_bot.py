@@ -1,6 +1,7 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from .config import Config, logger
-from .handlers import start, help_command, handle_text_message, reload_rules_command
+from .handlers import start, help_command, handle_text_message, reload_rules_command, describe_image_handler
+from .services import bot_services
 from ..utils.memory_manager import MemoryManager  # Добавляем импорт MemoryManager
 
 class TelegramBot:
@@ -12,6 +13,14 @@ class TelegramBot:
         self.token = token
         self.application = Application.builder().token(self.token).build()
         self.memory_manager = MemoryManager()  # Инициализируем менеджер памяти
+
+        # Передаем сервисы в контекст
+        if bot_services.openai_client:
+            self.application.bot_data['openai_client'] = bot_services.openai_client
+            logger.info("Клиент OpenAI добавлен в контекст бота.")
+        else:
+            logger.error("Клиент OpenAI не был инициализирован и не будет доступен в контексте.")
+
         self._register_handlers()
         logger.info("Telegram бот инициализирован.")
 
@@ -29,9 +38,12 @@ class TelegramBot:
 
         self.application.add_handler(CommandHandler("start", start_with_memory))
         self.application.add_handler(CommandHandler("help", help_with_memory))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_with_memory))
+        self.application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_text_with_memory))
         self.application.add_handler(CommandHandler("reload_rules", reload_rules_command))
         
+        # Регистрируем новый обработчик для изображений
+        # self.application.add_handler(MessageHandler(filters.PHOTO, describe_image_handler))
+
         logger.info("Обработчики команд зарегистрированы.")
 
     def run(self):

@@ -45,12 +45,23 @@ class Config:
     REPLY_ON_NO_MATCH = REPLY_ON_NO_MATCH_RAW in ('true', '1', 't')
     logger.info(f"REPLY_ON_NO_MATCH установлен в: {REPLY_ON_NO_MATCH}")
 
+    # Настройки для Vision модели
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    OPENAI_VISION_MODEL = os.getenv('OPENAI_VISION_MODEL', 'gpt-4o-mini')
+    OPENAI_VISION_PROMPT = os.getenv('OPENAI_VISION_PROMPT', 'Опиши, что изображено на этой картинке, кратко и по существу.')
+    logger.info(f"Vision модель: {OPENAI_VISION_MODEL}")
+
     @staticmethod
     def validate_token():
         """Проверяет наличие токена."""
         if not Config.TELEGRAM_BOT_TOKEN:
             logger.error("TELEGRAM_BOT_TOKEN не найден в .env файле или переменных окружения.")
             raise ValueError("Необходимо указать TELEGRAM_BOT_TOKEN")
+        
+        if not Config.OPENAI_API_KEY:
+            logger.error("OPENAI_API_KEY не найден в .env файле или переменных окружения.")
+            raise ValueError("Необходимо указать OPENAI_API_KEY")
+
         logger.info("Конфигурация успешно загружена.")
 
 # Валидация токена при импорте модуля

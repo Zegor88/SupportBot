@@ -3,7 +3,8 @@
 # которые использует бот.
 
 import logging
-from .config import logger
+from openai import AsyncOpenAI
+from .config import logger, Config
 
 from src.bot_agents import (
     LanguageValidatorAgentWrapper,
@@ -25,6 +26,17 @@ class BotServices:
         self.language_validator = LanguageValidatorAgentWrapper()
         self.logger_agent = BotLogger()
         self.runner = Runner  # Класс Runner для запуска агентов
+        self.openai_client = self._initialize_openai_client()
+
+    def _initialize_openai_client(self) -> AsyncOpenAI | None:
+        """Инициализирует асинхронный клиент OpenAI."""
+        try:
+            client = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+            logger.info("AsyncOpenAI client initialized successfully.")
+            return client
+        except Exception as e:
+            logger.error(f"CRITICAL: Failed to initialize AsyncOpenAI client: {e}", exc_info=True)
+            return None
 
     def _initialize_rules_manager(self, file_path: str) -> RulesManager | None:
         try:

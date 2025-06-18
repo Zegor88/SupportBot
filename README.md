@@ -1,120 +1,75 @@
 # Support Bot
 
 > [!NOTE]
-> Интеллектуальный Telegram-бот для автоматизации поддержки, использующий LLM-агентов для маршрутизации запросов и генерации ответов на основе базы знаний.
+> An intelligent Telegram bot powered by LLM that streamlines customer support by intelligently routing inquiries and generating knowledge-based responses.
 
-## 🚀 О проекте
+## 🚀 About the Project
 
-**Support Bot** — это интеллектуальный ассистент, который автоматизирует процесс поддержки пользователей через Telegram. Бот использует современных LLM-агентов для понимания запросов, их гибкой маршрутизации и предоставления релевантных ответов с использованием RAG (Retrieval-Augmented Generation).
+At its core, it leverages cutting-edge LLM agents provided by OpenAI Agent SDK to comprehend user inquiries, intelligently route them, and deliver precise responses using RAG (Retrieval-Augmented Generation) technology.
 
-Ключевая особенность бота — гибкая маршрутизация входящих сообщений на основе набора правил, определенных в файле `rules.yaml`. Это позволяет настраивать логику поведения для различных типов запросов без изменения кода.
+What sets this bot apart is its adaptable message routing system, configured through the `rules.yaml` file. This innovative approach allows you to fine-tune response behaviors for different types of inquiries without touching a single line of code.
 
-## ✨ Ключевые особенности
+## ✨ Key Features
 
-- **Гибкая маршрутизация**: Настройка сценариев обработки сообщений через `rules.yaml`.
-- **RAG-пайплайн**: `AnswerAgent` самостоятельно использует инструмент для извлечения контекста из базы знаний для генерации точных ответов.
-- **Динамические промпты**: Поведение агентов настраивается через шаблоны в `prompts.yaml`.
-- **Поддержка команд**: Включает команды для пользователей (`/start`, `/help`) и администраторов (`/reload_rules`).
-- **Строгая валидация**: Использование Pydantic моделей для валидации правил и конфигураций.
+- **Smart Routing**: Configure message handling scenarios through `rules.yaml`.
+- **RAG Pipeline**: `AnswerAgent` uses RAG as Tool, autonomously retrieves context from the knowledge base to generate accurate responses.
+- **Dynamic Prompts**: Agent behavior is customizable via templates in `prompts.yaml`.
+- **Command Support**: Features user commands (`/start`, `/help`) and admin utilities (`/reload_rules`).
+- **Robust Validation**: Employs Pydantic models to ensure rule and configuration integrity.
 
-## ⚙️ Принцип работы
+## ⚙️ How It Works
 
-При получении текстового сообщения бот выполняет следующую последовательность действий:
+When a message arrives, our bot springs into action with an intelligent processing workflow:
 
-```mermaid
-flowchart TD
-    subgraph Configuration
-        Z1[Администратор] -- Управляет --> Z2(rules.yaml)
-        Z1[Администратор] -- Управляет --> Z3(prompts.yaml)
-    end
+![test](SupportBot.jpg)
 
-    subgraph "Message Processing Flow"
-        A[Получено сообщение] --> B{Тип сообщения?}
-        B -->|Текст| C[LanguageValidatorAgent]
-        B -->|Команда| D[Обработка команд]
-        B -->|Другое| E[Игнорировать]
+Let's walk through the sophisticated yet streamlined message processing pipeline:
 
-        C --> F{Язык: Английский?}
-        F -- Да --> G[Передать на маршрутизацию]
-        F -- Нет --> H[Ответить о смене языка]
-        
-        G -- Сообщение --> J[RouterAgent]
-        Z2 -- Правила --> J
-        
-        J -- Генерирует JSON --> K{Анализ решения}
-        K -->|drop| L[Игнорировать]
-        K -->|forward| M[Переслать сообщение]
-        K -->|reply| N[Подготовка ответа]
-        
-        N --> O{Тип ответа?}
-        O -->|Прямой текст| P[Отправить готовый текст]
-        Z3 -- Предоставляет шаблоны --> S[AnswerAgent]
-        O -->|Ключ промпта| S
+1. **Language Check**: First, the `LanguageValidatorAgent` ensures the message is in English, setting the stage for accurate processing.
 
-        
-        
-        subgraph "AnswerAgent with RAG tool"
-            S -- "Нужна информация?" --> T["Tool: retrieve_rag_context"]
-            T --> VDB[(База знаний)]
-            VDB --> T
-            T -- Контекст --> S
-        end
-        
-        S --> U[Отправить сгенерированный ответ]
-    end
+2. **Smart Routing** with `RouterAgent`:
+   - Analyzes message content and matches it against rules in `rules.yaml` to determine the next action (`drop`, `forward`, or `reply`).
+   - Each routing decision undergoes validation through the `RouterDecision` Pydantic model.
+   - By default, messages without matching rules receive no response (customizable via `REPLY_ON_NO_MATCH=true`).
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style C fill:#bbf,stroke:#333,stroke-width:2px
-    style J fill:#bbf,stroke:#333,stroke-width:2px
-    style S fill:#bbf,stroke:#333,stroke-width:2px
-    style T fill:#dfd,stroke:#333,stroke-width:2px
-```
+3. **Action Execution**:
+   - **`drop`**: Message is gracefully ignored.
+   - **`forward`**: The `MessageForwarder` utility seamlessly redirects the message to a specified chat.
+   - **`reply`**: Two paths are possible:
+     - Direct response using predefined `response_text`
+     - Intelligent response generation via `AnswerAgent` using a `system_prompt_key`
 
+4. **Response Generation** with `AnswerAgent`:
+   - Takes charge of crafting personalized user responses.
+   - Autonomously leverages the `retrieve_rag_context` tool when additional knowledge is needed.
+   - Synthesizes final responses by combining context, conversation history, and `prompts.yaml` instructions.
 
-1.  **Валидация языка**: `LanguageValidatorAgent` проверяет, написано ли сообщение на английском языке.
-2.  **Маршрутизация (`RouterAgent`)**:
-    - `RouterAgent` анализирует текст сообщения и на основе правил из `rules.yaml` определяет необходимое действие (`drop`, `forward`, `reply`).
-    - Решение роутера валидируется через Pydantic-модель `RouterDecision`.
-    - Если ни одно терминальное правило не найдено, бот по умолчанию не отвечает (можно изменить через `REPLY_ON_NO_MATCH=true`).
-3.  **Выполнение действия**:
-    - **`drop`**: Сообщение игнорируется.
-    - **`forward`**: Сообщение пересылается в указанный чат с помощью утилиты `MessageForwarder`.
-    - **`reply`**:
-        - Если в правиле указан `response_text`, этот текст отправляется напрямую.
-        - Если указан `system_prompt_key`, управление передается `AnswerAgent`.
-4.  **Генерация ответа (`AnswerAgent`)**:
-    - `AnswerAgent` получает задачу ответить пользователю.
-    - Если для ответа требуется информация из базы знаний, агент **самостоятельно** вызывает инструмент `retrieve_rag_context`.
-    - На основе полученного контекста, истории диалога и инструкций из `prompts.yaml` агент генерирует и отправляет финальный ответ.
-5.  **Логирование**: Все ключевые действия и ошибки на каждом этапе логируются.
+5. **Comprehensive Logging**: Every critical action and error is meticulously tracked throughout the process.
 
-## 📄 Конфигурация
+## 📄 Configuration
 
 #### `rules.yaml`
 
-Это сердце логики бота. Файл содержит список правил, которые определяют, как реагировать на разные сообщения.
+At the heart of our bot's intelligence lies the `rules.yaml` file - a sophisticated yet straightforward rulebook that governs how the bot responds to various messages.
 
-- **`rule_id`**: Уникальный идентификатор.
-- **`priority`**: Порядок проверки (меньше = раньше).
-- **`conditions`**: Условия для срабатывания (ключевые слова, regex).
-- **`action`**: Действие (`reply`, `forward`, `drop`).
-- **`is_behavioral`**: `true` для правил, которые добавляют инструкции, но не завершают обработку.
-- **`action_params`**: Параметры для действия (например, `response_text` или `destination_chat_id`).
+- **`rule_id`**: A unique identifier for each rule
+- **`priority`**: Determines the checking order (lower numbers are checked first)
+- **`conditions`**: Defines trigger criteria using keywords or regex patterns
+- **`action`**: Specifies the response type (`reply`, `forward`, or `drop`)
+- **`is_behavioral`**: When set to `true`, adds instructions without terminating processing
+- **`action_params`**: Contains action-specific settings (such as `response_text` or `destination_chat_id`)
 
 #### `prompts.yaml`
 
-Содержит шаблоны системных промптов для `AnswerAgent`.
+This file houses the system prompt templates that guide the `AnswerAgent`'s behavior.
 
-- **Ключ промпта**: Например, `default_prompt`.
-- **Плейсхолдеры**: Шаблоны используют `{history}` и `{instruction}` для вставки динамических данных.
-- **Инструкции для инструмента**: Важно, чтобы промпт явно указывал агенту, когда и как использовать `retrieve_rag_context` tool для получения информации.
+- **Prompt Key**: For example, `default_prompt`
+- **Placeholders**: Templates leverage `{history}` and `{instruction}` for dynamic content insertion
+- **Tool Instructions**: Crucial guidelines that tell the agent when and how to utilize the `retrieve_rag_context` tool for information gathering
 
-> [!IMPORTANT]
-> Плейсхолдер `{context}` больше не используется в промптах. `AnswerAgent` теперь сам получает контекст через свой RAG-инструмент.
+#### `.env` file
 
-#### `.env` файл
-
-Для работы бота необходимо создать `.env` файл в корне проекта со следующими переменными:
+Create an `.env` file in the project root with these essential variables:
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token
 OPENAI_API_KEY=your_openai_key
@@ -122,57 +77,57 @@ ADMIN_USER_IDS=12345678,98765432
 REPLY_ON_NO_MATCH=false
 ```
 
-## 📦 Установка и запуск
+## 📦 Installation and Setup
 
-**Требования**:
-- Python 3.10+
-- Poetry
+**Prerequisites**:
+- Python 3.10 or newer
+- Poetry package manager
 
-**Шаги установки**:
-1.  **Клонируйте репозиторий**:
+**Getting Started**:
+1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/broxus/support-bot.git
+    git clone https://github.com/Zegor88/SupportBot.git
     cd support-bot
     ```
-2.  **Установите зависимости**:
+2.  **Install Dependencies**:
     ```bash
     poetry install
     ```
-3.  **Настройте `.env` файл**, как описано в разделе [конфигурации](#env-файл).
+3.  **Set up the `.env` file** as described in the [configuration](#env-file) section.
 
-**Запуск бота**:
+**Launch the Bot**:
 ```bash
 poetry run python src/main.py
 ```
 
-## 👨‍💻 Команды управления
+## 👨‍💻 Bot Commands
 
-- `/start` - Приветственное сообщение.
-- `/help` - Справочная информация.
-- `/reload_rules` - (Только для администраторов) Перезагружает `rules.yaml` без перезапуска бота.
+- `/start` - Displays a welcome message
+- `/help` - Shows available commands and usage information
+- `/reload_rules` - (Admin only) Refreshes `rules.yaml` configuration without bot restart
 
-## 📁 Структура проекта
+## 📁 Project Structure
 
 ```
 support-bot/
 ├── data/
-│   └── vectorstore/      # Векторное хранилище для RAG
+│   └── vectorstore/      # RAG vector storage
 ├── src/
-│   ├── bot/              # Основная логика бота (конфигурация, обработчики)
-│   ├── bot_agents/       # Определения агентов (RouterAgent, AnswerAgent и др.)
-│   ├── prompts/          # Логика сборки промптов
-│   ├── rules_manager/    # Менеджер правил из rules.yaml
-│   ├── tools/            # Инструменты для агентов (RAG)
-│   ├── utils/            # Вспомогательные утилиты (логгер, RAG, Telegram)
-│   └── main.py           # Точка входа в приложение
-├── .env.example          # Пример файла с переменными окружения
+│   ├── bot/              # Core bot logic (config and handlers)
+│   ├── bot_agents/       # Agent definitions (RouterAgent, AnswerAgent, etc.)
+│   ├── prompts/          # Prompt building logic
+│   ├── rules_manager/    # Rules.yaml manager
+│   ├── tools/            # Agent tools (RAG)
+│   ├── utils/            # Utilities (logger, RAG, Telegram)
+│   └── main.py           # Application entry point
+├── .env.example          # Environment variables template
 ├── poetry.lock
 ├── pyproject.toml
-├── prompts.yaml          # Шаблоны промптов для агентов
-├── rules.yaml            # Правила маршрутизации
+├── prompts.yaml          # Agent prompt templates
+├── rules.yaml            # Routing rules
 └── README.md
 ```
 
-## 📄 Лицензия
+## 📄 License
 
-Проект лицензирован под MIT License. 
+This project is licensed under the MIT License.

@@ -35,6 +35,18 @@ rules:
         - "The user started with a greeting. Greet them back warmly before addressing their main query."
 
   # --- Terminal Rules (these stop processing and define the final action) ---
+  - rule_id: "Reask_Questions"
+    priority: 1
+    is_behavioral: false # This makes the rule non-terminal
+    conditions:
+      - type: "description_match"
+        description: "You have tried to help the user with their question (its you second attempt), but he still has a issue or additional question."
+    action: "reply"
+    action_params:
+      behavioral_prompts:
+        - "Say, that his question has to be individually handled. Instruct the user to contact these administrators for more detailed help: @davidmuLish, @john_w_coLtrane, @eltcovai, @Aleksandr_Everscale."
+
+  
   - rule_id: "FAREWELL"
     priority: 10
     is_behavioral: false

@@ -29,6 +29,7 @@ class ReplyHandoffData(BaseModel):
     history: Optional[str] = None
     instruction: Optional[str] = None
     behavioral_prompts: Optional[List[str]] = None
+    image_base64: Optional[str] = None
 
 class InteractionLog(BaseModel):
     """

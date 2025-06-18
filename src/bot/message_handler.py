@@ -10,14 +10,34 @@ from .services import bot_services
 from src.bot_agents import RouterDecision, InteractionLog, ReplyHandoffData, RouterDecisionParams
 from src.utils.telegram_utils import MessageForwarder
 from src.bot_agents import answer_agent
+import base64
+import io
+from typing import Optional
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE, memory_manager=None) -> None:
     """Обработчик для всех текстовых сообщений, включает валидацию языка."""
     user_id = update.effective_user.id
-    text = update.message.text
+    text = update.message.text or update.message.caption or ""
     message_id = update.message.message_id
+    base64_image = None
 
-    logger.info(f"Received text message from {user_id}: '{text[:100]}...'")
+    # Получаем фото, если оно есть:
+    if update.message.photo:
+        photo = update.message.photo[-1]  # Берем фото самого высокого разрешения
+        photo_file = await photo.get_file()
+        
+        image_stream = io.BytesIO()
+        await photo_file.download_to_memory(image_stream)
+        image_stream.seek(0)
+        
+        # Кодируем изображение в base64
+        base64_image = base64.b64encode(image_stream.read()).decode('utf-8')
+
+    logger.info(f"Received message from {user_id}. Text: '{text[:100]}...'. Image attached: {base64_image is not None}")
+
+    if not text and not base64_image:
+        logger.warning(f"Empty message (no text, no photo) received from user {user_id}. Skipping.")
+        return
 
     if memory_manager:
         memory_manager.add_message(user_id, "user", text)
@@ -80,7 +100,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"RouterAgent decision details: {json.dumps(log_data, ensure_ascii=False, indent=2)}")
 
         # 3. Обработка решения RouterAgent
-        await execute_router_decision(update, context, router_decision, text, user_id, memory_manager)
+        await execute_router_decision(update, context, router_decision, text, user_id, memory_manager, base64_image)
 
     except json.JSONDecodeError as e:
         logger.error(f"Ошибка декодирования JSON от RouterAgent для user {user_id}: {e}. Строка: '{raw_decision_str}'", exc_info=True)
@@ -89,7 +109,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Общая ошибка при обработке решения RouterAgent для user {user_id}: {e}", exc_info=True)
         await update.message.reply_text("Sorry, an unexpected error occurred while processing your message.")
 
-async def execute_router_decision(update: Update, context: ContextTypes.DEFAULT_TYPE, decision: RouterDecision, text: str, user_id: int, memory_manager) -> None:
+async def execute_router_decision(update: Update, context: ContextTypes.DEFAULT_TYPE, decision: RouterDecision, text: str, user_id: int, memory_manager, image_base64: Optional[str] = None) -> None:
     """Выполняет действие, определенное RouterAgent."""
     action = decision.action
     params = decision.params
@@ -113,7 +133,7 @@ async def execute_router_decision(update: Update, context: ContextTypes.DEFAULT_
         await handle_forward_action(update, context, params, user_id, matched_rule_id)
 
     elif action in ["reply", "default_reply"]:
-        await handle_reply_action(update, context, text, user_id, memory_manager, matched_rule_id, params)
+        await handle_reply_action(update, context, text, user_id, memory_manager, matched_rule_id, params, image_base64)
 
     else:
         logger.warning(f"Unknown action '{action}' from RouterAgent for user {user_id}. Decision: {decision}")
@@ -143,7 +163,7 @@ async def handle_forward_action(update: Update, context: ContextTypes.DEFAULT_TY
         logger.warning(f"Failed to forward message for user {user_id}. Matched rule: {matched_rule_id}")
         await update.message.reply_text("Sorry, I could not forward your message at this time.")
 
-async def handle_reply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
+async def handle_reply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams, image_base64: Optional[str] = None) -> None:
     """Обрабатывает действие 'reply' или 'default_reply'."""
     # Если есть response_text, то отправляем его пользователю
     if params.response_text:
@@ -157,7 +177,10 @@ async def handle_reply_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Если есть system_prompt_key, то отправляем его пользователю
     if params.system_prompt_key:
-        await handle_answer_agent_handoff(update, context, text, user_id, memory_manager, matched_rule_id, params)
+        # Если есть картинка, но нет текста, не передаем пустой текст агенту
+        # Вместо этого агент получит специальную инструкцию в agent_input
+        message_for_agent = text if text or not image_base64 else None
+        await handle_answer_agent_handoff(update, context, message_for_agent, user_id, memory_manager, matched_rule_id, params, image_base64)
         return
     
     logger.error(f"Action 'reply' for user {user_id}, but no 'response_text' or 'system_prompt_key'. Matched rule: {matched_rule_id}.")
@@ -167,7 +190,7 @@ async def handle_reply_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_to_message_id=update.message.message_id
     )
 
-async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams) -> None:
+async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFAULT_TYPE, text: Optional[str], user_id: int, memory_manager, matched_rule_id: str | None, params: RouterDecisionParams, image_base64: Optional[str] = None) -> None:
     """Handles the RAG and AnswerAgent pipeline."""
     history = memory_manager.get_history_as_text(user_id) if memory_manager else ""
     
@@ -179,11 +202,12 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
     instruction_text = "\n".join(final_instructions)
 
     handoff_data = ReplyHandoffData(
-        user_message=text,
+        user_message=text or "",
         system_prompt_key=params.system_prompt_key,
         history=history,
         instruction=instruction_text,
-        behavioral_prompts=params.behavioral_prompts
+        behavioral_prompts=params.behavioral_prompts,
+        image_base64=image_base64
     )
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
@@ -196,7 +220,28 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
         
         logger.info(f"Final prompt for AnswerAgent (user: {user_id}):\n--- PROMPT START ---\n{final_prompt_for_agent}\n--- PROMPT END ---")
         
-        answer_result = await bot_services.runner.run(answer_agent, text, context=handoff_data)
+        agent_input = text
+        # Мультимодальный ввод для gpt-4o-mini
+        if handoff_data.image_base64:
+            content_list = []
+            # Добавляем текст, если он есть
+            if text:
+                content_list.append({"type": "text", "text": text})
+            else:
+                # Если текста нет, добавляем инструкцию по умолчанию.
+                content_list.append({"type": "text", "text": "Describe this image in detail."})
+            
+            # Добавляем изображение
+            content_list.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{handoff_data.image_base64}"
+                }
+            })
+            # Формируем итоговый ввод для агента
+            agent_input = {"role": "user", "content": content_list}
+        
+        answer_result = await bot_services.runner.run(answer_agent, agent_input, context=handoff_data)
         
         final_response = str(answer_result.final_output)
         
@@ -210,6 +255,8 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
                         rag_contexts.append(str(item.output))
 
         if memory_manager:
+            if text: # Логируем исходный вопрос пользователя
+                memory_manager.add_message(user_id, "user", text)
             memory_manager.add_message(user_id, "assistant", final_response)
 
         log_entry = InteractionLog(
@@ -217,7 +264,7 @@ async def handle_answer_agent_handoff(update: Update, context: ContextTypes.DEFA
             user_id=user_id,
             matched_rule_id=matched_rule_id,
             action="reply_with_answer_agent",
-            question=text,
+            question=text or "Image analysis",
             answer=final_response,
             final_prompt=final_prompt_for_agent,
             rag_contexts=rag_contexts if rag_contexts else None
