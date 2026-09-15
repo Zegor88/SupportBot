@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Local development
+.DS_Store
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Project specific
+*.db
+*.sqlite3
+knowledge/
+*.json
+!rules.json
+!prompts.json
+docs/
+data/
+
+# Python package management
+pyproject.toml
+poetry.lock
+Makefile 

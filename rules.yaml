@@ -1,0 +1,90 @@
+# src/rules.yaml
+# This file contains the rules for the bot.
+
+#type of conditions:
+# - keyword_match - match any of the keywords
+# - regex_match - match any of the regex patterns
+# - description_match - match the description of the rule
+
+# match_type (for keyword_match and regex_match):
+# - all
+# - any
+# - exact
+# - contains
+# - starts_with
+# - ends_with
+
+#type of action:
+# - reply - reply to the user
+# - forward - forward the user to the destination chat
+# - drop - drop the user from the conversation
+# - default_reply - reply with the default prompt
+
+
+rules:
+  # --- Behavioral Rule (adds context, processing continues) ---
+  - rule_id: "GREETING"
+    priority: 1
+    is_behavioral: true # This makes the rule non-terminal
+    conditions:
+      - type: "description_match"
+        description: "The user's message contains a greeting (e.g., 'hi', 'hello', 'good morning')."
+    action: "reply"
+    action_params:
+      behavioral_prompts:
+        - "The user started with a greeting. Greet them back warmly before addressing their main query."
+
+  # --- Terminal Rule (defines the final action and stops processing) ---
+  - rule_id: "FAREWELL"
+    priority: 10
+    is_behavioral: false
+    conditions:
+      - type: "description_match"
+        description: "The user says goodbye to the bot, says thanks and ends the conversation, etc."
+    action: "reply"
+    action_params:
+      response_text: "You are welcome! Have a great day."
+
+  # --- Test Rules (one per action type, so every behaviour can be triggered and verified) ---
+  - rule_id: "test_drop_action"
+    priority: 200
+    is_behavioral: false
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test drop please"]
+        match_type: "all"
+    action: "drop"
+    action_params: {}
+
+  - rule_id: "test_forward_action"
+    priority: 201
+    is_behavioral: false
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test forward please"]
+        match_type: "all"
+    action: "forward"
+    action_params:
+      destination_chat_id: "-1000000000000"  # placeholder: your own chat id
+
+  - rule_id: "test_direct_reply_action"
+    priority: 202
+    is_behavioral: false
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test direct reply please"]
+        match_type: "all"
+    action: "reply"
+    action_params:
+      response_text: "This is a direct reply test. It worked!"
+
+  - rule_id: "test_handoff_reply_action"
+    priority: 203
+    is_behavioral: false
+    conditions:
+      - type: "keyword_match"
+        keywords: ["test handoff reply please"]
+        match_type: "all"
+    action: "reply"
+    action_params:
+      system_prompt_key: "test_handoff_prompt"
